@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "video-digest"
+version = "0.1.0"
+description = "Turn a video (YouTube, Vimeo, Wistia, any yt-dlp site, a local file) into a timed transcript and a chaptered digest, free doors first."
+readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+authors = [{ name = "video-digest contributors" }]
+keywords = ["transcript", "captions", "youtube", "vimeo", "wistia", "whisper", "yt-dlp", "digest"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Video",
+]
+dependencies = [
+    "yt-dlp[default]>=2025.11.12",
+    "youtube-transcript-api>=1.2.0",
+]
+
+[project.optional-dependencies]
+speech = ["faster-whisper>=1.1.0", "numpy>=1.24"]
+dev = ["pytest>=8"]
+
+[project.scripts]
+video-digest = "video_digest.cli:main"
+
+[project.urls]
+Source = "https://github.com/RobBrautigam/video-digest"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --color=no"

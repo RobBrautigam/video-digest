@@ -1,0 +1,90 @@
+{
+  "window": 75.0,
+  "problems": [],
+  "quotes": [
+    {
+      "point": 1,
+      "time": "0:00:06",
+      "quote": "We call this the podium test",
+      "found_at": "0:00:06",
+      "offset_seconds": 0.6
+    },
+    {
+      "point": 2,
+      "time": "0:00:25",
+      "quote": "a lot of the evidence that we might encounter first will be much more subtle",
+      "found_at": "0:00:25",
+      "offset_seconds": 0.9
+    },
+    {
+      "point": 3,
+      "time": "0:00:31",
+      "quote": "detected above a background of abiotic chemistry",
+      "found_at": "0:00:31",
+      "offset_seconds": 0.9
+    },
+    {
+      "point": 4,
+      "time": "0:00:50",
+      "quote": "the evidence of life is often degraded and difficult to detect",
+      "found_at": "0:00:50",
+      "offset_seconds": 0.6
+    },
+    {
+      "point": 5,
+      "time": "0:01:01",
+      "quote": "the tantalizing possibility of extant life",
+      "found_at": "0:01:01",
+      "offset_seconds": 0.2
+    },
+    {
+      "point": 6,
+      "time": "0:01:27",
+      "quote": "the oxygenation of Earth's atmosphere or changes in surface color",
+      "found_at": "0:01:27",
+      "offset_seconds": 0.3
+    },
+    {
+      "point": 7,
+      "time": "0:01:46",
+      "quote": "Are we sure we're seeing what we think we're seeing",
+      "found_at": "0:01:46",
+      "offset_seconds": 0.8
+    },
+    {
+      "point": 8,
+      "time": "0:01:58",
+      "quote": "life is the hypothesis of last resort",
+      "found_at": "0:01:58",
+      "offset_seconds": 0.8
+    },
+    {
+      "point": 9,
+      "time": "0:02:19",
+      "quote": "not evidence of our own life, but evidence of indigenous life",
+      "found_at": "0:02:19",
+      "offset_seconds": 0.2
+    },
+    {
+      "point": 10,
+      "time": "0:02:29",
+      "quote": "is there any other way than life to make that thing",
+      "found_at": "0:02:29",
+      "offset_seconds": 0.7
+    },
+    {
+      "point": 11,
+      "time": "0:02:47",
+      "quote": "do we have separate independent lines of evidence",
+      "found_at": "0:02:47",
+      "offset_seconds": 0.4
+    },
+    {
+      "point": 12,
+      "time": "0:02:59",
+      "quote": "the really operative word in our question is we",
+      "found_at": "0:02:59",
+      "offset_seconds": 0.6
+    }
+  ]
+}

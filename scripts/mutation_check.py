@@ -1,0 +1,219 @@
+"""Prove the tests guard the code: break each door and guard on purpose, and require its test to go red.
+
+    python scripts/mutation_check.py
+
+Each mutation replaces one exact snippet (it must occur exactly once), runs the one test that guards
+it, and restores the file byte for byte whatever happens. A mutation whose test still passes is a
+test that guards nothing, and the script exits 1.
+"""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+PKG = ROOT / "src" / "video_digest"
+DOORS = "tests/test_doors.py"
+PIPE = "tests/test_pipeline_digest.py"
+PARSE = "tests/test_sources_parse.py"
+
+MUTATIONS: list[tuple[str, str, str, str, str]] = [
+    # (what it breaks, file, original snippet, mutated snippet, test that must go red)
+    ("youtube door: never a translated track", "doors/youtube_api.py",
+     "            hits = [t for t in group if lang_matches(t.language_code, lang)]", "            hits = list(group)",
+     f"{DOORS}::test_youtube_pick_manual_first_never_a_translation"),
+    ("youtube door: a block is a rate limit", "doors/youtube_api.py",
+     'if name in _BLOCKED or "429" in text', "if False",
+     f"{DOORS}::test_youtube_door_maps_refusals_and_missing_tracks"),
+    ("youtube door: entities and line breaks cleaned", "doors/youtube_api.py",
+     'clean_text(str(r["text"]))', 'str(r["text"])',
+     f"{DOORS}::test_youtube_door_returns_timed_clean_lines"),
+    ("yt-dlp: the -orig track over a translation", "ytdlp.py",
+     'if auto_only_original and orig_keys and not key.endswith("-orig"):', "if False:",
+     f"{DOORS}::test_caption_pick_takes_the_original_automatic_track_and_never_a_translation"),
+    ("yt-dlp: the spoken language with no -orig key", "ytdlp.py",
+     'if auto_only_original and not orig_keys and spoken and not lang_matches(base, spoken.split("-")[0]):',
+     "if False:",
+     f"{DOORS}::test_caption_pick_without_an_orig_key_matches_the_spoken_language"),
+    ("yt-dlp: the original audio, not the dub", "ytdlp.py",
+     "key=lambda f: (lang_pref(f), is_original(f), -abr(f))", "key=lambda f: (-abr(f),)",
+     f"{DOORS}::test_audio_pick_avoids_the_dubbed_track"),
+    ("yt-dlp: a bot check is a rate limit", "ytdlp.py",
+     "if any(w.lower() in text.lower() for w in _BOT_WORDS):", "if False:",
+     f"{DOORS}::test_ytdlp_errors_name_the_refusal"),
+    ("yt-dlp: every JavaScript runtime on PATH", "ytdlp.py",
+     "    found = {name: {} for name in JS_RUNTIMES if which(name)}", "    found = {}",
+     f"{DOORS}::test_js_runtimes_enables_every_runtime_on_path"),
+    ("yt-dlp: a 403 names the fix", "ytdlp.py",
+     '    if "HTTP Error 403" in text:', "    if False:",
+     f"{DOORS}::test_ytdlp_errors_name_the_refusal"),
+    ("stills: one still per transition", "stills.py",
+     "        if not kept or t - kept[-1] >= MIN_GAP:", "        if True:",
+     f"{PIPE}::test_stills_choice_caps_and_gives_every_chapter_one"),
+    ("yt-dlp subtitles door: parse by the file's format", "doors/ytdlp_subs.py",
+     'entry.get("ext") or "vtt")', '"vtt")',
+     f"{DOORS}::test_ytdlp_subs_door_fetches_the_picked_file"),
+    ("page door: Wistia's three-letter codes", "doors/page_captions.py",
+     "(two is not None and lang_matches(two, lang))", "False",
+     f"{DOORS}::test_wistia_page_captions"),
+    ("page door: a three-letter code is mapped, not cut", "doors/page_captions.py",
+     "    two = ISO_639_2.get(code.lower()) if len(code) == 3 else None",
+     "    two = code[:2].lower() if len(code) == 3 else None",
+     f"{DOORS}::test_wistia_three_letter_codes_are_mapped_not_cut"),
+    ("languages: a region asked matches the bare track", "context.py",
+     ' or want.startswith(code + "-")', "",
+     f"{DOORS}::test_language_asked_with_a_region_matches_the_bare_track_and_prefers_the_exact_one"),
+    ("youtube door: the exact language tag first", "doors/youtube_api.py",
+     "return max(hits, key=lambda t: lang_closeness(t.language_code, lang))", "return hits[0]",
+     f"{DOORS}::test_language_asked_with_a_region_matches_the_bare_track_and_prefers_the_exact_one"),
+    ("yt-dlp: the exact language tag first", "ytdlp.py",
+     "        if match:  # the exact tag first", "        if False:  # the exact tag first",
+     f"{DOORS}::test_language_asked_with_a_region_matches_the_bare_track_and_prefers_the_exact_one"),
+    ("yt-dlp: a format with unknown codecs may carry sound", "ytdlp.py",
+     'return f.get("acodec") != "none"  # None', 'return f.get("acodec") not in (None, "none")  # None',
+     f"{DOORS}::test_audio_pick_keeps_a_format_whose_codecs_are_unknown_and_ranks_it_last"),
+    ("yt-dlp: unknown codecs rank last", "ytdlp.py",
+     "(-known(f), -lang_pref(f)", "(-lang_pref(f)",
+     f"{DOORS}::test_audio_pick_keeps_a_format_whose_codecs_are_unknown_and_ranks_it_last"),
+    ("network: a stall mid-body is a door error", "context.py",
+     "    except (OSError, http.client.HTTPException) as e:", "    except ZeroDivisionError as e:",
+     f"{DOORS}::test_a_network_stall_mid_body_is_a_door_error"),
+    ("page door: Vimeo's relative track address", "doors/page_captions.py",
+     'urljoin("https://player.vimeo.com/", track["url"])', 'track["url"]',
+     f"{DOORS}::test_vimeo_page_text_tracks"),
+    ("page door: no language asked is not the default translation", "doors/page_captions.py",
+     '        lambda t: _is(str(t.get(lang_key) or ""), "en"),\n', "",
+     f"{DOORS}::test_page_pick_with_no_language_asked_is_not_the_default_translation"),
+    ("run: a failed probe is tried once", "pipeline.py",
+     '    if not any(a["door"] == "probe" for a in attempts):', "    if True:",
+     f"{PIPE}::test_a_failed_probe_is_tried_once_and_the_player_supplies_the_title"),
+    ("run: the player's title when yt-dlp cannot read it", "pipeline.py",
+     "        info.setdefault(k, v)", "        pass",
+     f"{PIPE}::test_a_failed_probe_is_tried_once_and_the_player_supplies_the_title"),
+    ("speech door: the language is passed to the model", "doors/speech.py",
+     'language=(lang.split("-")[0] if lang else None)', "language=None",
+     f"{DOORS}::test_speech_door_reads_segments"),
+    ("speech door: multilingual model when the language is unknown", "doors/speech.py",
+     'return "base.en" if spoken.startswith("en") else "base"', 'return "base.en"',
+     f"{DOORS}::test_speech_model_choice_and_override"),
+    ("speech door: audio through the original-language pick", "doors/speech.py",
+     'fmt = ytdlp.pick_audio_format(ctx.info.get("formats") or [])',
+     'fmt = (ctx.info.get("formats") or [{}])[0].get("format_id")',
+     f"{DOORS}::test_speech_audio_uses_the_original_language_pick"),
+    ("paid door: off without --allow-paid", "doors/paid.py",
+     "    if not ctx.allow_paid:", "    if False:",
+     f"{DOORS}::test_paid_door_is_off_without_the_flag_and_the_key"),
+    ("paid door: waits for a job", "doors/paid.py",
+     "    while job and not data.get(\"content\"):", "    while False:",
+     f"{DOORS}::test_paid_door_reads_timed_content_and_waits_for_a_job"),
+    ("sidecar door: finds the caption file", "doors/sidecar.py",
+     "    return (plain or [p for _, p in tagged] or [None])[0]", "    return None",
+     f"{DOORS}::test_sidecar_caption_file_beside_a_local_video"),
+    ("sidecar door: the exact name, never another video's", "doors/sidecar.py",
+     '        elif name.startswith(stem + ".") and "." not in name[len(stem) + 1:]:',
+     "        elif name.startswith(stem):",
+     f"{DOORS}::test_sidecar_matches_the_exact_name_only"),
+    ("sidecar door: the untagged file when no language is asked", "doors/sidecar.py",
+     "            plain.append(p)", "            pass",
+     f"{DOORS}::test_sidecar_matches_the_exact_name_only"),
+    ("speech door: its parts checked before any download", "doors/speech.py",
+     "        if missing:", "        if False:",
+     f"{DOORS}::test_speech_door_checks_its_parts_before_downloading"),
+    ("speech door: ffmpeg is one of its parts", "doors/speech.py",
+     '    if not which("ffmpeg"):', "    if False:",
+     f"{DOORS}::test_speech_door_checks_its_parts_before_downloading"),
+    ("speech door: a model that cannot load is a door error", "doors/speech.py",
+     "        except Exception as e:  # an offline first run", "        except ZeroDivisionError as e:  # an offline",
+     f"{DOORS}::test_speech_door_turns_a_model_failure_into_a_door_error"),
+    ("speech door: a transcribe failure is a door error", "doors/speech.py",
+     "    except Exception as e:  # segments are decoded lazily", "    except ZeroDivisionError as e:  # lazily",
+     f"{DOORS}::test_speech_door_turns_a_model_failure_into_a_door_error"),
+    ("run: the install hint for a missing speech door", "pipeline.py",
+     'if any(a["kind"] == "DoorUnavailable" and "faster-whisper" in a["error"] for a in attempts):', "if False:",
+     f"{PIPE}::test_every_door_failing_names_each_one_and_the_next_step"),
+    ("source: two videos never share a folder", "sources.py",
+     '        if self.kind in ("site", "file"):', "        if False:",
+     f"{PARSE}::test_two_videos_never_share_an_output_folder"),
+    ("digest: a bad time sorts last, so a draft renders", "digest.py",
+     "    except (ValueError, AttributeError, TypeError):\n        return float(\"inf\")",
+     "    except ZeroDivisionError:\n        return float(\"inf\")",
+     f"{PIPE}::test_a_draft_with_bad_times_still_renders_both_pages"),
+    ("run: a refusal moves to the next door", "pipeline.py",
+     "        except DoorError as e:\n            took", "        except NoCaptions as e:\n            took",
+     f"{PIPE}::test_a_rate_limit_moves_to_the_next_door"),
+    ("run: no captions on YouTube skips to speech", "pipeline.py",
+     "                skip_captions = True", "                skip_captions = False",
+     f"{PIPE}::test_no_captions_on_youtube_skips_to_speech"),
+    ("run: the paid door is last", "pipeline.py",
+     '"youtube": ["youtube-api", "ytdlp-subs", "speech", "paid"]',
+     '"youtube": ["youtube-api", "ytdlp-subs", "paid", "speech"]',
+     f"{PIPE}::test_door_order_free_first_and_the_paid_door_last"),
+    ("pacing: waits between requests", "context.py",
+     "            self.sleep(self.pace - gap)", "            pass",
+     f"{PIPE}::test_polite_pacing_waits_between_requests"),
+    ("source: a YouTube channel or playlist is refused", "sources.py",
+     "    if host in YOUTUBE_HOSTS:\n        raise", "    if False:\n        raise",
+     f"{PARSE}::test_youtube_address_that_is_not_one_video_is_refused"),
+    ("captions: rolling automatic lines kept once", "parse.py",
+     "            new = body[len(prev):].strip()", "            new = body",
+     f"{PARSE}::test_vtt_rolling_automatic_captions_keep_each_word_once"),
+    ("digest: a quote must be near its time", "digest.py",
+     "        if near is not None and abs(t - near) > window:", "        if False:",
+     f"{PIPE}::test_quote_found_near_its_time_and_refused_far_from_it"),
+    ("digest: a placeholder time is refused", "digest.py",
+     "            bad.append(m.group(0))", "            pass",
+     f"{PIPE}::test_check_refuses_a_missing_quote_a_placeholder_time_and_disordered_chapters"),
+    ("digest: snap moves a point to its quote", "digest.py",
+     '            p["time"] = q["found_at"]', "            pass",
+     f"{PIPE}::test_snap_moves_each_point_to_where_its_quote_starts"),
+    ("digest page: text is escaped", "html_page.py",
+     "f\"<h1>{escape(d.get('title') or 'Untitled video')}</h1>\"", "f\"<h1>{d.get('title') or 'Untitled video'}</h1>\"",
+     f"{PIPE}::test_check_passes_a_good_digest_and_renders_both_pages"),
+    ("stills: a talk is not a screen demo", "stills.py",
+     '"screen_demo": hits >= 5 and rate >= 0.5', '"screen_demo": True',
+     f"{PIPE}::test_screen_demo_score_counts_pointing_phrases"),
+    ("stills: every chapter gets a still", "stills.py",
+     "            times.append(round(ch.start + min(5.0, max(0.0, (end - ch.start) / 2)), 2))", "            pass",
+     f"{PIPE}::test_stills_choice_caps_and_gives_every_chapter_one"),
+]
+
+
+def run_test(nodeid: str) -> int:
+    return subprocess.run([sys.executable, "-m", "pytest", "-x", "-q", "--color=no", "-p", "no:cacheprovider",
+                           nodeid], cwd=ROOT, capture_output=True).returncode
+
+
+def main() -> int:
+    baseline = subprocess.run([sys.executable, "-m", "pytest", "-q", "--color=no", "-p", "no:cacheprovider"],
+                              cwd=ROOT, capture_output=True, text=True)
+    if baseline.returncode != 0:
+        print("the suite is not green before mutating:\n" + baseline.stdout[-2000:])
+        return 1
+    survivors = 0
+    for what, rel, old, new, nodeid in MUTATIONS:
+        path = PKG / rel
+        original = path.read_bytes()
+        text = original.decode("utf-8")
+        count = text.count(old)
+        if count != 1:
+            print(f"SETUP   {what}: snippet found {count} times in {rel}")
+            survivors += 1
+            continue
+        try:
+            path.write_bytes(text.replace(old, new).encode("utf-8"))
+            code = run_test(nodeid)
+        finally:
+            path.write_bytes(original)
+        verdict = "RED" if code != 0 else "SURVIVED"
+        survivors += code == 0
+        print(f"{verdict:8} {what}  [{nodeid.split('::')[-1]}]")
+    after = run_test("tests")
+    print(f"\n{len(MUTATIONS) - survivors} of {len(MUTATIONS)} mutations turned their test red; "
+          f"suite after restore: {'green' if after == 0 else 'RED'}")
+    return 0 if survivors == 0 and after == 0 else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

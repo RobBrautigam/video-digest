@@ -1,0 +1,139 @@
+{
+  "title": "What Would It Take To Say We Found Life? We Asked a NASA Expert",
+  "source": "https://www.youtube.com/watch?v=6SDVw1PYYcw",
+  "summary": "A NASA scientist answers the \"podium test\": what evidence would let a scientist stand before the world and say life has been found beyond Earth. The answer is a sequence of checks (is the signal real, is it contamination, could anything other than life make it) followed by independent lines of evidence and scrutiny by the whole scientific community.",
+  "chapters": [
+    {
+      "start": "0:00:00",
+      "title": "The search for subtle signs",
+      "speakers": [
+        "NASA scientist (name not in the captions)"
+      ],
+      "summary": "Sets up the podium test. The bar is high, and the first evidence is likely to be subtle chemistry rather than a skeleton or a technology signature."
+    },
+    {
+      "start": "0:00:35",
+      "title": "Contextualizing the search",
+      "speakers": [
+        "NASA scientist"
+      ],
+      "summary": "What we see depends on where we look: ancient, degraded samples on Mars; tiny samples from the ocean worlds Europa and Enceladus; planet-scale signs such as an oxygenated atmosphere for exoplanets."
+    },
+    {
+      "start": "0:01:26",
+      "title": "Verifying signals",
+      "speakers": [
+        "NASA scientist"
+      ],
+      "summary": "General principles: first make sure the signal is real, and treat life as the hypothesis of last resort."
+    },
+    {
+      "start": "0:02:06",
+      "title": "Ruling out contamination",
+      "speakers": [
+        "NASA scientist"
+      ],
+      "summary": "Instruments are built on a planet full of life, so Earth contamination must be excluded, then whether life could live there, then every non-living process that could make the same signal."
+    },
+    {
+      "start": "0:02:39",
+      "title": "Community scrutiny",
+      "speakers": [
+        "NASA scientist"
+      ],
+      "summary": "Independent lines of evidence build confidence, and the claim stands only after the whole scientific community has examined it."
+    }
+  ],
+  "points": [
+    {
+      "time": "0:00:06",
+      "kind": "method",
+      "text": "Frame the claim as a test: what would it take to stand before an international audience and say it?",
+      "quote": "We call this the podium test",
+      "speaker": "NASA scientist"
+    },
+    {
+      "time": "0:00:25",
+      "kind": "claim",
+      "text": "The first evidence is expected to be subtle, such as chemistry, not an obvious structure.",
+      "quote": "a lot of the evidence that we might encounter first will be much more subtle",
+      "speaker": "NASA scientist"
+    },
+    {
+      "time": "0:00:31",
+      "kind": "method",
+      "text": "Chemical signs of life have to stand out above non-living (abiotic) chemistry.",
+      "quote": "detected above a background of abiotic chemistry",
+      "speaker": "NASA scientist"
+    },
+    {
+      "time": "0:00:50",
+      "kind": "warning",
+      "text": "On Mars the samples may be billions of years old, and such evidence is often degraded.",
+      "quote": "the evidence of life is often degraded and difficult to detect",
+      "speaker": "NASA scientist"
+    },
+    {
+      "time": "0:01:01",
+      "kind": "example",
+      "text": "Europa and Enceladus could hold life that is still alive (extant life).",
+      "quote": "the tantalizing possibility of extant life",
+      "speaker": "NASA scientist"
+    },
+    {
+      "time": "0:01:27",
+      "kind": "example",
+      "text": "For exoplanets, only planet-scale changes are visible through a telescope.",
+      "quote": "the oxygenation of Earth's atmosphere or changes in surface color",
+      "speaker": "NASA scientist"
+    },
+    {
+      "time": "0:01:46",
+      "kind": "method",
+      "text": "Check one: are we sure we are seeing what we think we are seeing?",
+      "quote": "Are we sure we're seeing what we think we're seeing",
+      "speaker": "NASA scientist"
+    },
+    {
+      "time": "0:01:58",
+      "kind": "quote",
+      "text": "Carl Sagan's rule, quoted by the speaker: rule out every alternative first.",
+      "quote": "life is the hypothesis of last resort",
+      "speaker": "NASA scientist, quoting Carl Sagan"
+    },
+    {
+      "time": "0:02:19",
+      "kind": "method",
+      "text": "Check two: rule out contamination from the Earth-built spacecraft and instruments.",
+      "quote": "not evidence of our own life, but evidence of indigenous life",
+      "speaker": "NASA scientist"
+    },
+    {
+      "time": "0:02:29",
+      "kind": "method",
+      "text": "Check three: could anything other than life make the same thing, including processes not yet known?",
+      "quote": "is there any other way than life to make that thing",
+      "speaker": "NASA scientist"
+    },
+    {
+      "time": "0:02:47",
+      "kind": "method",
+      "text": "Look for separate, independent lines of evidence that corroborate the first one.",
+      "quote": "do we have separate independent lines of evidence",
+      "speaker": "NASA scientist"
+    },
+    {
+      "time": "0:02:59",
+      "kind": "claim",
+      "text": "The operative word is \"we\": the claim is made by the whole scientific community.",
+      "quote": "the really operative word in our question is we",
+      "speaker": "NASA scientist"
+    }
+  ],
+  "actions": [
+    {
+      "text": "When you evaluate a bold claim in your own field, run the same three checks in order: is the signal real, is it contamination, is there another explanation.",
+      "time": "0:01:42"
+    }
+  ]
+}

@@ -1,0 +1,115 @@
+"""The speech door: faster-whisper on this machine, reading the original-language audio track."""
+
+from __future__ import annotations
+
+import importlib.util
+import os
+import shutil
+import subprocess
+from pathlib import Path
+from typing import Any, Callable
+
+from video_digest import ytdlp
+from video_digest.context import RunContext
+from video_digest.models import DoorError, DoorUnavailable, Line, Transcript
+
+NAME = "faster-whisper"
+
+MODEL_ENV = "VIDEO_DIGEST_WHISPER_MODEL"  # a model name (base.en, small) or a local model folder
+MODEL_DIR_ENV = "VIDEO_DIGEST_MODEL_DIR"  # where models are downloaded and cached
+DEVICE_ENV = "VIDEO_DIGEST_WHISPER_DEVICE"  # cpu (default) or cuda
+SAMPLE_RATE = 16000
+
+
+def model_name(ctx: RunContext) -> str:
+    """The English-only base model when the speech is known to be English; the multilingual base otherwise."""
+    if ctx.env.get(MODEL_ENV):
+        return ctx.env[MODEL_ENV]
+    spoken = (ctx.lang or ctx.original_language or "").lower()
+    return "base.en" if spoken.startswith("en") else "base"
+
+
+def missing_parts(find_spec: Callable[[str], Any] = importlib.util.find_spec,
+                  which: Callable[[str], Any] = shutil.which) -> list[str]:
+    """What the speech door needs and this machine lacks, checked before any audio is downloaded."""
+    missing = [f"{pkg} (pip install 'video-digest[speech]')"
+               for mod, pkg in (("faster_whisper", "faster-whisper"), ("numpy", "numpy")) if find_spec(mod) is None]
+    if not which("ffmpeg"):
+        missing.append("ffmpeg on PATH")
+    return missing
+
+
+def decode(path: Path, run: Callable[..., Any] = subprocess.run) -> Any:
+    """ffmpeg to 16 kHz mono float32, handed to the model as an array (no PyAV decode on the way)."""
+    if not shutil.which("ffmpeg"):
+        raise DoorUnavailable("ffmpeg is not on PATH; install it to use the speech door")
+    import numpy as np
+
+    p = run(["ffmpeg", "-nostdin", "-hide_banner", "-loglevel", "error", "-i", str(path), "-vn", "-ac", "1",
+             "-ar", str(SAMPLE_RATE), "-f", "f32le", "-"], capture_output=True, check=False)
+    if p.returncode != 0 or not p.stdout:
+        raise DoorError(f"ffmpeg could not decode the audio: {p.stderr.decode('utf-8', 'replace')[-300:]}")
+    return np.frombuffer(p.stdout, dtype=np.float32)
+
+
+def load_model(ctx: RunContext) -> Any:
+    os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")  # Windows without symlinks still caches fine
+    try:
+        from faster_whisper import WhisperModel
+    except ImportError as e:
+        raise DoorUnavailable("faster-whisper is not installed (pip install 'video-digest[speech]')") from e
+    name = model_name(ctx)
+    device = ctx.env.get(DEVICE_ENV, "cpu")
+    kwargs: dict[str, Any] = {"device": device, "compute_type": "int8" if device == "cpu" else "float16"}
+    if ctx.env.get(MODEL_DIR_ENV):
+        kwargs["download_root"] = ctx.env[MODEL_DIR_ENV]
+    ctx.log(f"speech: loading {name} on {device} (downloads once on first use)")
+    return WhisperModel(name, **kwargs)
+
+
+def audio_file(ctx: RunContext, downloader: Callable[..., Path] = ytdlp.download) -> Path:
+    if ctx.source.kind == "file":
+        return Path(ctx.source.ref)
+    if ctx.info is None:
+        raise DoorError("no metadata to choose an audio track from (the probe failed)")
+    fmt = ytdlp.pick_audio_format(ctx.info.get("formats") or [])
+    if not fmt:
+        raise DoorError("the site offers no format with sound")
+    ctx.log(f"speech: downloading audio format {fmt}")
+    return downloader(ctx, fmt, "audio")
+
+
+def run(ctx: RunContext, model: Any = None, decoder: Callable[[Path], Any] = decode,
+        fetch_audio: Callable[[RunContext], Path] = audio_file,
+        check: Callable[[], list[str]] = missing_parts,
+        loader: Callable[[RunContext], Any] = load_model) -> Transcript:
+    name = model_name(ctx)
+    if model is None:
+        # the parts and the model first: a missing install or a model that cannot load costs no download
+        missing = check()
+        if missing:
+            raise DoorUnavailable("the speech door needs " + ", ".join(missing))
+        try:
+            model = loader(ctx)
+        except DoorError:
+            raise
+        except Exception as e:  # an offline first run, a bad model name, a device setting without its driver
+            raise DoorUnavailable(f"the speech model {name} could not load: {type(e).__name__}: {e}") from e
+    path = fetch_audio(ctx)
+    audio = decoder(path)
+    lang = ctx.lang or ctx.original_language
+    if name.endswith(".en"):
+        lang = "en"
+    try:
+        segments, info = model.transcribe(audio, language=(lang.split("-")[0] if lang else None),
+                                          beam_size=5, vad_filter=True)
+        lines = [Line(float(s.start), float(s.end) - float(s.start), " ".join(s.text.split()))
+                 for s in segments if s.text.strip()]
+    except Exception as e:  # segments are decoded lazily, so a failure can surface while reading them
+        raise DoorError(f"the speech model failed: {type(e).__name__}: {e}") from e
+    if not lines:
+        raise DoorError("the speech model heard no words")
+    detected = getattr(info, "language", None)
+    return Transcript(lines=lines, door=NAME, language=detected or lang, generated=True, track=name,
+                      notes={"audio_seconds": round(len(audio) / SAMPLE_RATE, 1),
+                             "language_probability": getattr(info, "language_probability", None)})
