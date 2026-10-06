@@ -39,7 +39,7 @@ ORDER: dict[str, list[str]] = {
 class AllDoorsFailed(RuntimeError):
     def __init__(self, attempts: list[dict[str, Any]]):
         self.attempts = attempts
-        lines = [f"  - {a['door']}: {a['error']}" for a in attempts]
+        lines = [f"  - {a['door']}: {a['error']}" for a in attempts if not a["ok"]]
         hints = []
         if any("faster-whisper is not installed" in a["error"] for a in attempts):
             hints.append("install the speech door: pip install 'video-digest[speech]'")
@@ -82,9 +82,22 @@ def _probe(ctx: RunContext) -> dict[str, Any] | None:
     return ytdlp.probe(ctx)
 
 
+def _probe_attempt(ctx: RunContext, probe: Callable[[RunContext], Any]) -> dict[str, Any]:
+    """Read the metadata once; a failure is recorded and the doors that do not need it go on."""
+    t0 = time.monotonic()
+    try:
+        probe(ctx)
+    except DoorError as e:
+        ctx.log(f"metadata: {e}")
+        return {"door": "probe", "ok": False, "kind": type(e).__name__, "error": str(e),
+                "seconds": round(time.monotonic() - t0, 2)}
+    return {"door": "probe", "ok": True, "kind": "ok", "error": "", "seconds": round(time.monotonic() - t0, 2)}
+
+
 def take_doors(ctx: RunContext, order: list[str], doors: dict[str, Callable[[RunContext], Transcript]] | None = None,
-               probe: Callable[[RunContext], Any] = _probe) -> tuple[Transcript | None, list[dict[str, Any]]]:
+               probe: Callable[[RunContext], Any] | None = None) -> tuple[Transcript | None, list[dict[str, Any]]]:
     doors = doors or DOORS
+    probe = probe or _probe
     attempts: list[dict[str, Any]] = []
     probed = False
     skip_captions = False
@@ -96,13 +109,7 @@ def take_doors(ctx: RunContext, order: list[str], doors: dict[str, Callable[[Run
             continue
         if name in NEEDS_PROBE and not probed:
             probed = True
-            t0 = time.monotonic()
-            try:
-                probe(ctx)
-            except DoorError as e:
-                attempts.append({"door": "probe", "ok": False, "kind": type(e).__name__, "error": str(e),
-                                 "seconds": round(time.monotonic() - t0, 2)})
-                ctx.log(f"probe: {e}")
+            attempts.append(_probe_attempt(ctx, probe))
         t0 = time.monotonic()
         try:
             result = doors[name](ctx)
@@ -137,18 +144,17 @@ def run(ref: str, opts: Options) -> Path:
         ctx.log = opts.log
     order = door_order(source, opts.doors)
     transcript, attempts = take_doors(ctx, order)
-    if ctx.info is None:
-        # the caption library won on YouTube: one metadata read for the title, length and chapters
-        t0 = time.monotonic()
-        try:
-            _probe(ctx)
-        except DoorError as e:
-            attempts.append({"door": "probe", "ok": False, "kind": type(e).__name__, "error": str(e),
-                             "seconds": round(time.monotonic() - t0, 2)})
-            ctx.log(f"probe (title, chapters): {e}")
+    if not any(a["door"] == "probe" for a in attempts):
+        # a door that needs no metadata won: one read for the title, length and chapters
+        attempts.append(_probe_attempt(ctx, _probe))
     if transcript is None:
         raise AllDoorsFailed(attempts)
-    info = ctx.info or {}
+    if transcript.notes.get("language_guessed"):
+        ctx.log(f"language: took {transcript.language} of {', '.join(transcript.notes.get('tracks') or [])} "
+                "(the player does not say which is spoken); pass --lang to choose")
+    info = dict(ctx.info or {})
+    for k, v in (transcript.notes.get("page_meta") or {}).items():
+        info.setdefault(k, v)  # the player's own title and length when yt-dlp could not read them
     chapters = ytdlp.chapters_from_info(info)
     duration = info.get("duration") or (transcript.lines[-1].start + transcript.lines[-1].dur)
     if chapters and chapters[-1].end is None:

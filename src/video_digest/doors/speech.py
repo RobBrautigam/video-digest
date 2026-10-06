@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -41,6 +42,7 @@ def decode(path: Path, run: Callable[..., Any] = subprocess.run) -> Any:
 
 
 def load_model(ctx: RunContext) -> Any:
+    os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")  # Windows without symlinks still caches fine
     try:
         from faster_whisper import WhisperModel
     except ImportError as e:

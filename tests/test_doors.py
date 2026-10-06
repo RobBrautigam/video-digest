@@ -155,7 +155,15 @@ def test_stills_format_is_the_smallest_picture_at_360_or_over():
     assert ytdlp.pick_stills_format(formats) == "360"
 
 
+def test_js_runtimes_enables_every_runtime_on_path():
+    assert ytdlp.js_runtimes(lambda n: "/bin/" + n if n == "node" else None) == {"node": {}}
+    assert ytdlp.js_runtimes(lambda n: None) == {"deno": {}}  # yt-dlp's own default
+    assert "js_runtimes" in ytdlp.base_opts(SimpleNamespace(pace=1.0))
+
+
 def test_ytdlp_errors_name_the_refusal():
+    forbidden = ytdlp.map_error(Exception("ERROR: unable to download video data: HTTP Error 403: Forbidden"), "x")
+    assert type(forbidden) is DoorError and "yt-dlp-ejs" in str(forbidden)
     assert isinstance(ytdlp.map_error(Exception("ERROR: HTTP Error 429: Too Many Requests"), "speech"), RateLimited)
     assert isinstance(ytdlp.map_error(Exception("Sign in to confirm you're not a bot"), "speech"), RateLimited)
     other = ytdlp.map_error(Exception("ERROR: Unsupported URL"), "speech")
@@ -188,11 +196,30 @@ def test_vimeo_page_text_tracks(make_ctx):
     })
     t = page_captions.run(make_ctx("https://vimeo.com/76979871", fetch=fetch))
     assert t.lines[0].start == 1.0 and fetch.calls[-1] == "https://vimeo.com/texttrack/1.vtt?token=x"
+    assert t.notes["page_meta"] == {}
     empty = FakeFetch({"https://player.vimeo.com/video/76979871/config": json.dumps({"request": {}})})
     with pytest.raises(NoCaptions):
         page_captions.run(make_ctx("https://vimeo.com/76979871", fetch=empty))
     with pytest.raises(Refused):
         page_captions.run(make_ctx(YT))
+
+
+def test_page_pick_with_no_language_asked_is_not_the_default_translation(make_ctx):
+    tracks = [{"lang": "de", "url": "/t/de.vtt", "kind": "subtitles", "default": True},
+              {"lang": "es", "url": "/t/es.vtt", "kind": "subtitles"},
+              {"lang": "en", "url": "/t/en.vtt", "kind": "subtitles"}]
+    fetch = FakeFetch({
+        "https://player.vimeo.com/video/76979871/config": json.dumps(
+            {"video": {"title": "Player", "duration": 62, "owner": {"name": "Owner"}},
+             "request": {"text_tracks": tracks}}),
+        "https://vimeo.com/t/en.vtt": VTT,
+    })
+    t = page_captions.run(make_ctx("https://vimeo.com/76979871", fetch=fetch))
+    assert t.language == "en" and t.notes["language_guessed"] is True
+    assert t.notes["page_meta"] == {"title": "Player", "duration": 62, "uploader": "Owner"}
+    captions_kind = tracks + [{"lang": "fr", "url": "/t/fr.vtt", "kind": "captions"}]
+    assert page_captions._pick(captions_kind, None, "lang")["lang"] == "fr"
+    assert page_captions._pick(tracks, None, "lang", original="es")["lang"] == "es"
 
 
 # --- speech ------------------------------------------------------------------------------------------

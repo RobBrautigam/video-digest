@@ -56,7 +56,7 @@ def test_no_captions_on_youtube_skips_to_speech(make_ctx):
                                   doors={"youtube-api": none, "ytdlp-subs": never, "speech": lambda c: _t("speech")},
                                   probe=lambda c: None)
     assert result.door == "speech"
-    assert [a["kind"] for a in attempts] == ["NoCaptions", "Skipped", "ok"]
+    assert [a["kind"] for a in attempts if a["door"] != "probe"] == ["NoCaptions", "Skipped", "ok"]
 
 
 def test_every_door_failing_names_each_one_and_the_next_step(make_ctx):
@@ -72,6 +72,30 @@ def test_every_door_failing_names_each_one_and_the_next_step(make_ctx):
     assert result is None
     msg = str(AllDoorsFailed(attempts))
     assert "youtube-api: blocked" in msg and "video-digest[speech]" in msg
+
+
+def test_a_failed_probe_is_tried_once_and_the_player_supplies_the_title(tmp_path, monkeypatch):
+    from video_digest import pipeline
+
+    probes = []
+
+    def probe(ctx):
+        probes.append(1)
+        raise DoorError("the web client only works when logged in")
+
+    def page(ctx):
+        return Transcript(lines=[Line(5, 2, "hello")], door="page captions", language="en",
+                          notes={"page_meta": {"title": "Player video", "duration": 62}})
+
+    monkeypatch.setattr(pipeline, "_probe", probe)
+    monkeypatch.setitem(pipeline.DOORS, "page", page)
+    folder = pipeline.run("https://vimeo.com/76979871",
+                          pipeline.Options(out=tmp_path, doors=["ytdlp-subs", "page"], stills="never",
+                                           log=lambda m: None, env={}))
+    meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+    assert probes == [1]
+    assert (meta["title"], meta["duration"], meta["door"]) == ("Player video", 62, "page captions")
+    assert "## Transcript" in (folder / "transcript.md").read_text(encoding="utf-8")
 
 
 def test_polite_pacing_waits_between_requests(tmp_path):
@@ -101,6 +125,7 @@ def test_stills_choice_caps_and_gives_every_chapter_one():
     chosen = stills.choose(times, chapters, 200, cap=10)
     assert len([t for t in chosen if t < 100]) == 10
     assert any(100 <= t < 200 for t in chosen)  # chapter two had no scene change
+    assert stills.choose([3.2, 3.27, 3.9, 9.0], [], 20, cap=10) == [3.2, 9.0]  # one still per transition
 
 
 # --- digest -----------------------------------------------------------------------------------------

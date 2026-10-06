@@ -17,7 +17,7 @@ classifiers = [
     "Topic :: Multimedia :: Video",
 ]
 dependencies = [
-    "yt-dlp>=2025.1.1",
+    "yt-dlp[default]>=2025.11.12",
     "youtube-transcript-api>=1.2.0",
 ]
 

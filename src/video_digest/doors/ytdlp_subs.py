@@ -18,7 +18,7 @@ def _fetch_with_ytdlp(ctx: RunContext, url: str) -> bytes:
         with yt_dlp.YoutubeDL(ytdlp.base_opts(ctx)) as ydl:
             return ydl.urlopen(url).read()
     except Exception as e:
-        raise ytdlp.map_error(e, "the next door") from e
+        raise ytdlp.map_error(e, "the page's own captions or speech") from e
 
 
 def run(ctx: RunContext, fetch: Callable[[RunContext, str], bytes] | None = None) -> Transcript:

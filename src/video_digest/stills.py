@@ -12,6 +12,7 @@ from video_digest.models import Chapter, DoorUnavailable, Line
 from video_digest.parse import stamp
 
 SCENE_THRESHOLD = 0.30
+MIN_GAP = 2.0  # seconds between two stills
 # Words a speaker says when the screen carries something: a signal of a screen demo, not proof.
 POINTING = re.compile(r"\b(on (?:the |my |your )?screen|you can see|right here|over here|click(?:ing)? (?:on )?|"
                       r"this button|let me show you|scroll (?:down|up)|drag(?:ging)? |type in|the menu)\b", re.I)
@@ -39,7 +40,11 @@ def scene_times(video: Path, threshold: float = SCENE_THRESHOLD, run: Callable[.
 
 def choose(times: list[float], chapters: list[Chapter], duration: float | None, cap: int) -> list[float]:
     """Every scene change up to the cap (spread evenly past it), plus one still for any chapter with none."""
-    times = sorted(set(round(t, 2) for t in times))
+    kept: list[float] = []
+    for t in sorted(set(round(t, 2) for t in times)):
+        if not kept or t - kept[-1] >= MIN_GAP:  # a transition fires several changes within a second
+            kept.append(t)
+    times = kept
     if len(times) > cap:
         step = len(times) / cap
         times = [times[int(i * step)] for i in range(cap)]

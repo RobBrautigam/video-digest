@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -19,9 +20,30 @@ def _yt_dlp():
     return yt_dlp
 
 
+class _Silent:
+    """yt-dlp prints its errors to stderr even when quiet; the run reports them itself, once."""
+
+    def debug(self, msg: str) -> None:
+        pass
+
+    info = warning = error = debug
+
+
+JS_RUNTIMES = ("deno", "node", "bun")
+
+
+def js_runtimes(which: Any = shutil.which) -> dict[str, dict[str, str]]:
+    """Every JavaScript runtime on PATH. yt-dlp enables only deno by default, and YouTube's media now
+    needs one to solve its challenge (with the yt-dlp-ejs package), or downloads answer 403."""
+    found = {name: {} for name in JS_RUNTIMES if which(name)}
+    return found or {"deno": {}}
+
+
 def base_opts(ctx: RunContext) -> dict[str, Any]:
     """Quiet, one video, no retries against a refusal, and a pause between requests."""
     return {
+        "logger": _Silent(),
+        "js_runtimes": js_runtimes(),
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
@@ -39,6 +61,10 @@ def map_error(exc: Exception, next_door: str) -> DoorError:
     first = next((ln for ln in text.splitlines() if ln.strip()), "no message")[:240]
     if any(w.lower() in text.lower() for w in _BOT_WORDS):
         return RateLimited(f"the site refused yt-dlp ({first}); next door: {next_door}")
+    if "HTTP Error 403" in text:
+        return DoorError(f"the site refused the download (HTTP 403). On YouTube this usually means yt-dlp "
+                         "could not solve its challenge: install deno or Node.js and the yt-dlp-ejs package "
+                         f"(pip install 'yt-dlp[default]'); next door: {next_door}")
     return DoorError(f"yt-dlp: {first}; next door: {next_door}")
 
 
@@ -53,7 +79,7 @@ def probe(ctx: RunContext, ydl_factory: Any = None) -> dict[str, Any]:
     except DoorError:
         raise
     except Exception as e:
-        raise map_error(e, "the next door") from e
+        raise map_error(e, "the doors that need no metadata (the caption library, the page's own captions)") from e
     if info.get("_type") == "playlist":
         raise DoorError("this address is a playlist, not one video; pass a single video's URL")
     ctx.info = info
@@ -127,7 +153,7 @@ def download(ctx: RunContext, format_id: str, stem: str, ydl_factory: Any = None
         with factory(opts) as ydl:
             ydl.download([ctx.source.ref])
     except Exception as e:
-        raise map_error(e, "the next door") from e
+        raise map_error(e, "the next door in the order") from e
     files = sorted(p for p in ctx.workdir.glob(f"{stem}.*") if p.suffix not in (".part", ".ytdl"))
     if not files:
         raise DoorError(f"yt-dlp wrote no {stem} file")
