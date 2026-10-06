@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import os
 import sys
 import time
@@ -31,14 +32,27 @@ def http_get(url: str, headers: Mapping[str, str] | None = None, timeout: float 
         raise DoorError(f"HTTP {e.code} from {urlparse(url).hostname}") from e
     except urllib.error.URLError as e:
         raise DoorError(f"network error: {e.reason}") from e
+    except (OSError, http.client.HTTPException) as e:  # a read timeout or a cut connection mid-body
+        raise DoorError(f"network error: {type(e).__name__} from {urlparse(url).hostname}") from e
+
+
+def _tag(code: str) -> str:
+    return code.lower().replace("_", "-")
 
 
 def lang_matches(code: str | None, want: str) -> bool:
-    """'en-US' matches 'en'; 'eng' does not (a prefix must end at a language subtag)."""
+    """'en-US' matches 'en' and 'en' matches 'en-US'; 'eng' does not (a prefix must end at a subtag)."""
     if not code:
         return False
-    code, want = code.lower().replace("_", "-"), want.lower().replace("_", "-")
-    return code == want or code.startswith(want + "-")
+    code, want = _tag(code), _tag(want)
+    return code == want or code.startswith(want + "-") or want.startswith(code + "-")
+
+
+def lang_closeness(code: str | None, want: str) -> int:
+    """2 for the same tag, 1 for a match at a subtag, 0 for none: en-US wins over en when en-US is asked."""
+    if not code or not lang_matches(code, want):
+        return 0
+    return 2 if _tag(code) == _tag(want) else 1
 
 
 @dataclass

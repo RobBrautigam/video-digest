@@ -9,7 +9,7 @@ import pytest
 
 from video_digest import ytdlp
 from video_digest.doors import page_captions, paid, sidecar, speech, youtube_api, ytdlp_subs
-from video_digest.models import DoorError, NoCaptions, RateLimited, Refused
+from video_digest.models import DoorError, DoorUnavailable, NoCaptions, RateLimited, Refused
 from tests.conftest import FakeFetch
 
 YT = "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
@@ -298,3 +298,106 @@ def test_sidecar_caption_file_beside_a_local_video(make_ctx, tmp_path):
     (tmp_path / "talk.en.vtt").write_text(VTT, encoding="utf-8")
     t = sidecar.run(make_ctx(str(video)))
     assert t.lines[0].text == "Hello from the player" and t.track == "talk.en.vtt"
+
+
+# --- review fixes: languages, sidecar names, unknown codecs, the speech door's guards -----------------
+
+def test_language_asked_with_a_region_matches_the_bare_track_and_prefers_the_exact_one():
+    from video_digest.context import lang_matches
+
+    assert lang_matches("en", "en-US") and lang_matches("en-US", "en")
+    assert not lang_matches("en-GB", "en-US") and not lang_matches("eng", "en")
+    assert youtube_api.pick([Track("en", False)], "en-US") is not None
+    bare, exact = Track("en", False), Track("en-US", False)
+    assert youtube_api.pick([bare, exact], "en-US") is exact
+    info = {"subtitles": {"en": [{"ext": "vtt", "url": "u1"}], "en-US": [{"ext": "vtt", "url": "u2"}]}}
+    assert ytdlp.pick_caption(info, "en-US", None)[0] == "en-US"
+
+
+def test_wistia_three_letter_codes_are_mapped_not_cut():
+    assert page_captions._is("spa", "es") and page_captions._is("por", "pt-BR") and page_captions._is("jpn", "ja")
+    assert page_captions._is("eng", "en") and page_captions._is("ger", "de")
+    assert not page_captions._is("est", "es")  # Estonian is not Spanish
+
+
+def test_sidecar_matches_the_exact_name_only(tmp_path):
+    talk = tmp_path / "talk.mp4"
+    talk.write_bytes(b"x")
+    (tmp_path / "talk-2.mp4").write_bytes(b"x")
+    (tmp_path / "talk-2.vtt").write_text(VTT, encoding="utf-8")
+    assert sidecar.find(talk, None) is None  # another video's captions are not this one's
+    (tmp_path / "talk.vtt").write_text(VTT, encoding="utf-8")
+    (tmp_path / "talk.de.vtt").write_text(VTT, encoding="utf-8")
+    assert sidecar.find(talk, None).name == "talk.vtt"
+    assert sidecar.find(talk, "de").name == "talk.de.vtt"
+    assert sidecar.find(talk, "fr").name == "talk.vtt"
+    odd = tmp_path / "lecture [1080p].mp4"
+    odd.write_bytes(b"x")
+    (tmp_path / "lecture [1080p].srt").write_text("1\n00:00:01,000 --> 00:00:02,000\nhi\n", encoding="utf-8")
+    assert sidecar.find(odd, None).name == "lecture [1080p].srt"
+
+
+def test_audio_pick_keeps_a_format_whose_codecs_are_unknown_and_ranks_it_last():
+    assert ytdlp.pick_audio_format([{"format_id": "http-mp4", "ext": "mp4"}]) == "http-mp4"
+    known = {"format_id": "known", "vcodec": "avc1", "acodec": "mp4a", "height": 720}
+    assert ytdlp.pick_audio_format([{"format_id": "unknown", "ext": "mp4", "height": 360}, known]) == "known"
+
+
+def test_speech_door_checks_its_parts_before_downloading(make_ctx):
+    fetched = []
+    with pytest.raises(DoorUnavailable, match="faster-whisper"):
+        speech.run(make_ctx(YT), check=lambda: ["faster-whisper (pip install 'video-digest[speech]')"],
+                   fetch_audio=lambda c: fetched.append(1))
+    assert fetched == []
+    assert speech.missing_parts(find_spec=lambda m: None, which=lambda n: None) == [
+        "faster-whisper (pip install 'video-digest[speech]')", "numpy (pip install 'video-digest[speech]')",
+        "ffmpeg on PATH"]
+
+
+def test_speech_door_turns_a_model_failure_into_a_door_error(make_ctx, tmp_path):
+    def no_cuda(ctx):
+        raise RuntimeError("CUDA driver not found")
+
+    fetched = []
+    with pytest.raises(DoorUnavailable, match="could not load"):
+        speech.run(make_ctx(YT), check=lambda: [], loader=no_cuda, fetch_audio=lambda c: fetched.append(1))
+    assert fetched == []
+
+    class Broken(FakeModel):
+        def transcribe(self, audio, language=None, **kw):
+            def segs():
+                raise RuntimeError("bad audio")
+                yield
+            return segs(), SimpleNamespace(language="en")
+
+    with pytest.raises(DoorError, match="speech model failed"):
+        speech.run(make_ctx(YT), model=Broken(), decoder=lambda p: [0.0] * 16000,
+                   fetch_audio=lambda c: tmp_path / "a.m4a")
+
+
+def test_a_network_stall_mid_body_is_a_door_error(monkeypatch):
+    import http.client
+    import urllib.request
+
+    from video_digest import context
+
+    def stall(req, timeout=None):
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(urllib.request, "urlopen", stall)
+    with pytest.raises(DoorError, match="network error"):
+        context.http_get("https://example.org/a")
+
+    class Cut:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+
+        def read(self):
+            raise http.client.IncompleteRead(b"par")
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=None: Cut())
+    with pytest.raises(DoorError, match="network error"):
+        context.http_get("https://example.org/a")

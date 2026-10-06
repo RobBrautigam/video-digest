@@ -220,6 +220,14 @@ def time_link(source: str | None, kind: str | None, vid: str | None, seconds: fl
     return None
 
 
+def time_key(p: dict[str, Any]) -> float:
+    """A point's seconds for sorting; a malformed or missing time sorts last, so a --draft still renders."""
+    try:
+        return parse_stamp(p.get("time"))
+    except (ValueError, AttributeError, TypeError):
+        return float("inf")
+
+
 def _grouped(points: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any]]]]:
     order = {k: i for i, k in enumerate(KINDS)}
     groups: dict[str, list[dict[str, Any]]] = {}
@@ -250,7 +258,7 @@ def render_markdown(d: dict[str, Any], meta: dict[str, Any], result: CheckResult
     out.append("")
     for kind, pts in _grouped(d.get("points") or []):
         out += [f"## {LABELS.get(kind, kind.title())}", ""]
-        for p in sorted(pts, key=lambda p: parse_stamp(p.get("time", "0:00"))):
+        for p in sorted(pts, key=time_key):
             who = f" ({p['speaker']})" if p.get("speaker") else ""
             line = f"- **{p.get('time')}**{who} {p.get('text', '').strip()}"
             if p.get("quote"):

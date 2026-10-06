@@ -41,7 +41,7 @@ class AllDoorsFailed(RuntimeError):
         self.attempts = attempts
         lines = [f"  - {a['door']}: {a['error']}" for a in attempts if not a["ok"]]
         hints = []
-        if any("faster-whisper is not installed" in a["error"] for a in attempts):
+        if any(a["kind"] == "DoorUnavailable" and "faster-whisper" in a["error"] for a in attempts):
             hints.append("install the speech door: pip install 'video-digest[speech]'")
         if any(a["kind"] == "RateLimited" for a in attempts):
             hints.append("the site is limiting requests from this address: wait, or run from another network")

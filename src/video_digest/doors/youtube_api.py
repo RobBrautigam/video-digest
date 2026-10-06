@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Iterable
 
-from video_digest.context import RunContext, lang_matches
+from video_digest.context import RunContext, lang_closeness, lang_matches
 from video_digest.models import DoorError, DoorUnavailable, Line, NoCaptions, RateLimited, Refused, Transcript
 from video_digest.parse import clean_text
 
@@ -25,9 +25,9 @@ def pick(tracks: Iterable[Any], lang: str | None) -> Any | None:
     auto = [t for t in tracks if t.is_generated]
     if lang:
         for group in (manual, auto):
-            for t in group:
-                if lang_matches(t.language_code, lang):
-                    return t
+            hits = [t for t in group if lang_matches(t.language_code, lang)]
+            if hits:
+                return max(hits, key=lambda t: lang_closeness(t.language_code, lang))
         return None
     if auto:
         spoken = auto[0].language_code

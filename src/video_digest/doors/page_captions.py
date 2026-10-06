@@ -17,9 +17,25 @@ WISTIA_CAPTIONS = "https://fast.wistia.com/embed/captions/{id}.vtt?language={lan
 VIMEO_CONFIG = "https://player.vimeo.com/video/{id}/config"
 
 
+# Wistia names caption languages with ISO 639-2 codes (eng, spa); the rest of the tool uses ISO 639-1 (en, es).
+# Cutting a three-letter code to two letters is wrong for many (spa is es, est is Estonian, not Spanish).
+ISO_639_2 = {
+    "afr": "af", "ara": "ar", "baq": "eu", "ben": "bn", "bul": "bg", "cat": "ca", "ces": "cs", "chi": "zh",
+    "cym": "cy", "cze": "cs", "dan": "da", "deu": "de", "dut": "nl", "ell": "el", "eng": "en", "est": "et",
+    "eus": "eu", "fas": "fa", "fin": "fi", "fra": "fr", "fre": "fr", "ger": "de", "gle": "ga", "glg": "gl",
+    "gre": "el", "heb": "he", "hin": "hi", "hrv": "hr", "hun": "hu", "ice": "is", "ind": "id", "isl": "is",
+    "ita": "it", "jpn": "ja", "kor": "ko", "lav": "lv", "lit": "lt", "may": "ms", "msa": "ms", "nld": "nl",
+    "nob": "nb", "nor": "no", "per": "fa", "pol": "pl", "por": "pt", "ron": "ro", "rum": "ro", "rus": "ru",
+    "slk": "sk", "slo": "sk", "slv": "sl", "spa": "es", "srp": "sr", "swa": "sw", "swe": "sv", "tam": "ta",
+    "tel": "te", "tgl": "tl", "tha": "th", "tur": "tr", "ukr": "uk", "urd": "ur", "vie": "vi", "wel": "cy",
+    "zho": "zh",
+}
+
+
 def _is(code: str, lang: str) -> bool:
     # Wistia uses three-letter codes (eng); Vimeo two-letter (en, en-US)
-    return lang_matches(code, lang) or (len(code) == 3 and code[:2] == lang[:2].lower())
+    two = ISO_639_2.get(code.lower()) if len(code) == 3 else None
+    return lang_matches(code, lang) or (two is not None and lang_matches(two, lang))
 
 
 def _pick(tracks: list[dict[str, Any]], lang: str | None, lang_key: str, original: str | None = None

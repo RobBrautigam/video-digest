@@ -5,7 +5,7 @@ from __future__ import annotations
 from html import escape
 from typing import Any
 
-from video_digest.digest import LABELS, CheckResult, _grouped, time_link
+from video_digest.digest import LABELS, CheckResult, _grouped, time_key, time_link
 from video_digest.parse import parse_stamp, stamp
 
 CSS = """
@@ -34,7 +34,7 @@ ol.actions li{margin:6px 0}footer{color:var(--muted);font-size:13px;margin-top:4
 def _t(value: str, meta: dict[str, Any]) -> str:
     try:
         secs = parse_stamp(value)
-    except (ValueError, AttributeError):
+    except (ValueError, AttributeError, TypeError):
         return escape(str(value))
     link = time_link(meta.get("source"), meta.get("kind"), meta.get("id"), secs)
     label = escape(stamp(secs))
@@ -71,7 +71,7 @@ def render_html(d: dict[str, Any], meta: dict[str, Any], result: CheckResult) ->
     index = {id(p): i + 1 for i, p in enumerate(d.get("points") or [])}
     for kind, pts in groups:
         body += [f'<h2 id="k-{escape(kind)}">{escape(LABELS.get(kind, kind.title()))}</h2>', '<ul class="points">']
-        for p in sorted(pts, key=lambda p: parse_stamp(p.get("time", "0:00"))):
+        for p in sorted(pts, key=time_key):
             who = f' <span class="who">{escape(p["speaker"])}</span>' if p.get("speaker") else ""
             item = f"<li>{_t(p.get('time', ''), meta)}{who} {escape(p.get('text', '').strip())}"
             if p.get("quote"):

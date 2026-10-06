@@ -65,13 +65,19 @@ def test_every_door_failing_names_each_one_and_the_next_step(make_ctx):
             raise DoorError(msg)
         return door
 
+    from video_digest.doors import speech
+
+    def no_whisper(ctx):  # the real speech door on a machine without the [speech] extra
+        parts = speech.missing_parts(find_spec=lambda m: None if m == "faster_whisper" else object(),
+                                     which=lambda n: "ffmpeg")
+        return speech.run(ctx, check=lambda: parts, fetch_audio=lambda c: pytest.fail("downloaded audio"))
+
     result, attempts = take_doors(make_ctx(YT), ["youtube-api", "speech"],
-                                  doors={"youtube-api": fail("blocked"),
-                                         "speech": fail("faster-whisper is not installed (pip ...)")},
+                                  doors={"youtube-api": fail("blocked"), "speech": no_whisper},
                                   probe=lambda c: None)
     assert result is None
     msg = str(AllDoorsFailed(attempts))
-    assert "youtube-api: blocked" in msg and "video-digest[speech]" in msg
+    assert "youtube-api: blocked" in msg and "next: install the speech door" in msg
 
 
 def test_a_failed_probe_is_tried_once_and_the_player_supplies_the_title(tmp_path, monkeypatch):
@@ -185,6 +191,20 @@ def test_check_refuses_a_missing_quote_a_placeholder_time_and_disordered_chapter
     assert not r.ok
     assert "quote not found" in text and "'0:04:1x' is not a time" in text
     assert "'1:00:1x' is not a time" in text and "not after the chapter before it" in text
+
+
+def test_a_draft_with_bad_times_still_renders_both_pages(tmp_path):
+    bad = json.loads(json.dumps(GOOD))
+    bad["points"] += [{"time": "1:00:1x", "kind": "method", "text": "placeholder"},
+                      {"time": None, "kind": "method", "text": "no time"}]
+    folder = _folder(tmp_path, bad)
+    r = digest.check(folder)
+    assert not r.ok
+    meta = json.loads((folder / "meta.json").read_text())
+    md = digest.render_markdown(bad, meta, r)
+    html = html_page.render_html(bad, meta, r)
+    assert md.index("Free tools") < md.index("placeholder")  # a bad time sorts last
+    assert "placeholder" in html and "no time" in html
 
 
 def test_snap_moves_each_point_to_where_its_quote_starts(tmp_path):

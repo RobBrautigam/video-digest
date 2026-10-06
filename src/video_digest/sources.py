@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,6 +24,11 @@ class Source:
     @property
     def folder_name(self) -> str:
         safe = re.sub(r"[^A-Za-z0-9_.-]+", "-", self.id).strip("-") or "video"
+        if self.kind in ("site", "file"):
+            # a page id or a file stem is not unique (player?id=1 and ?id=2, a/talk.mp4 and b/talk.mp4):
+            # a short hash of the full address or path keeps two videos out of one folder
+            key = os.path.normcase(self.ref) if self.kind == "file" else self.ref
+            return f"{self.kind}-{safe}-{hashlib.sha1(key.encode('utf-8')).hexdigest()[:8]}"
         return f"{self.kind}-{safe}"
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from video_digest.context import RunContext
+from video_digest.context import RunContext, lang_matches
 from video_digest.models import NoCaptions, Refused, Transcript
 from video_digest.parse import parse_caption_file
 
@@ -12,11 +12,26 @@ NAME = "sidecar captions"
 
 
 def find(path: Path, lang: str | None) -> Path | None:
-    cands = sorted(p for p in path.parent.glob(f"{path.stem}*") if p.suffix.lower() in (".vtt", ".srt"))
+    """The video's own name exactly (talk.vtt), or its name and one tag (talk.en.vtt); never talk-2.vtt.
+
+    Names are compared as text, not as a glob, so a name with brackets (lecture [1080p]) still matches.
+    With a language asked, the tagged file in that language wins, then the untagged one.
+    """
+    stem = path.stem.lower()
+    plain: list[Path] = []
+    tagged: list[tuple[str, Path]] = []
+    for p in sorted(path.parent.iterdir()):
+        if not p.is_file() or p.suffix.lower() not in (".vtt", ".srt"):
+            continue
+        name = p.stem.lower()
+        if name == stem:
+            plain.append(p)
+        elif name.startswith(stem + ".") and "." not in name[len(stem) + 1:]:
+            tagged.append((name[len(stem) + 1:], p))
     if lang:
-        tagged = [p for p in cands if f".{lang.lower()}" in p.name.lower()]
-        cands = tagged or [p for p in cands if p.stem == path.stem]
-    return cands[0] if cands else None
+        hits = [p for tag, p in tagged if lang_matches(tag, lang)]
+        return (hits or plain or [None])[0]
+    return (plain or [p for _, p in tagged] or [None])[0]
 
 
 def run(ctx: RunContext) -> Transcript:

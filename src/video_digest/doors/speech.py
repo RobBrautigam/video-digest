@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -26,6 +27,16 @@ def model_name(ctx: RunContext) -> str:
         return ctx.env[MODEL_ENV]
     spoken = (ctx.lang or ctx.original_language or "").lower()
     return "base.en" if spoken.startswith("en") else "base"
+
+
+def missing_parts(find_spec: Callable[[str], Any] = importlib.util.find_spec,
+                  which: Callable[[str], Any] = shutil.which) -> list[str]:
+    """What the speech door needs and this machine lacks, checked before any audio is downloaded."""
+    missing = [f"{pkg} (pip install 'video-digest[speech]')"
+               for mod, pkg in (("faster_whisper", "faster-whisper"), ("numpy", "numpy")) if find_spec(mod) is None]
+    if not which("ffmpeg"):
+        missing.append("ffmpeg on PATH")
+    return missing
 
 
 def decode(path: Path, run: Callable[..., Any] = subprocess.run) -> Any:
@@ -69,18 +80,33 @@ def audio_file(ctx: RunContext, downloader: Callable[..., Path] = ytdlp.download
 
 
 def run(ctx: RunContext, model: Any = None, decoder: Callable[[Path], Any] = decode,
-        fetch_audio: Callable[[RunContext], Path] = audio_file) -> Transcript:
+        fetch_audio: Callable[[RunContext], Path] = audio_file,
+        check: Callable[[], list[str]] = missing_parts,
+        loader: Callable[[RunContext], Any] = load_model) -> Transcript:
+    name = model_name(ctx)
+    if model is None:
+        # the parts and the model first: a missing install or a model that cannot load costs no download
+        missing = check()
+        if missing:
+            raise DoorUnavailable("the speech door needs " + ", ".join(missing))
+        try:
+            model = loader(ctx)
+        except DoorError:
+            raise
+        except Exception as e:  # an offline first run, a bad model name, a device setting without its driver
+            raise DoorUnavailable(f"the speech model {name} could not load: {type(e).__name__}: {e}") from e
     path = fetch_audio(ctx)
     audio = decoder(path)
-    model = model or load_model(ctx)
-    name = model_name(ctx)
     lang = ctx.lang or ctx.original_language
     if name.endswith(".en"):
         lang = "en"
-    segments, info = model.transcribe(audio, language=(lang.split("-")[0] if lang else None),
-                                      beam_size=5, vad_filter=True)
-    lines = [Line(float(s.start), float(s.end) - float(s.start), " ".join(s.text.split()))
-             for s in segments if s.text.strip()]
+    try:
+        segments, info = model.transcribe(audio, language=(lang.split("-")[0] if lang else None),
+                                          beam_size=5, vad_filter=True)
+        lines = [Line(float(s.start), float(s.end) - float(s.start), " ".join(s.text.split()))
+                 for s in segments if s.text.strip()]
+    except Exception as e:  # segments are decoded lazily, so a failure can surface while reading them
+        raise DoorError(f"the speech model failed: {type(e).__name__}: {e}") from e
     if not lines:
         raise DoorError("the speech model heard no words")
     detected = getattr(info, "language", None)

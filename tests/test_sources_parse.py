@@ -35,9 +35,24 @@ def test_a_local_file_and_a_missing_path(tmp_path):
     f = tmp_path / "clip one.mp4"
     f.write_bytes(b"x")
     s = detect(str(f))
-    assert s.kind == "file" and s.id == "clip one" and s.folder_name == "file-clip-one"
+    assert s.kind == "file" and s.id == "clip one" and s.folder_name.startswith("file-clip-one-")
     with pytest.raises(ValueError, match="not a file"):
         detect(str(tmp_path / "missing.mp4"))
+
+
+def test_two_videos_never_share_an_output_folder(tmp_path):
+    one, two = detect("https://example.com/player?id=1"), detect("https://example.com/player?id=2")
+    assert one.id == two.id == "example.com-player"  # the readable part
+    assert one.folder_name != two.folder_name
+    assert detect("https://example.com/player?id=1").folder_name == one.folder_name  # stable across runs
+    (tmp_path / "a").mkdir()
+    (tmp_path / "b").mkdir()
+    (tmp_path / "a" / "talk.mp4").write_bytes(b"x")
+    (tmp_path / "b" / "talk.mp4").write_bytes(b"x")
+    fa, fb = detect(str(tmp_path / "a" / "talk.mp4")), detect(str(tmp_path / "b" / "talk.mp4"))
+    assert fa.id == fb.id == "talk" and fa.folder_name != fb.folder_name
+    assert fa.folder_name.startswith("file-talk-")
+    assert detect("https://vimeo.com/76979871").folder_name == "vimeo-76979871"  # a site id is unique already
 
 
 def test_json3_keeps_each_event_time_and_drops_empty_events():

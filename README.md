@@ -117,7 +117,7 @@ writing included.
 | YouTube, NASA, [CC BY](https://www.youtube.com/watch?v=6SDVw1PYYcw) | 3:27 | caption library (manual en-US) | 668 | 139 | 5 | 1.1 s | 7.4 s |
 | Vimeo, [the Vimeo player video](https://vimeo.com/76979871) | 1:02 | the player's caption file (en, chosen from de, es, en, fr) | 124 | 14 | 0 | 3.2 s | 4.5 s |
 | Wistia, [a captions demo](https://fast.wistia.net/embed/iframe/j99ficzros) | 0:40 | yt-dlp subtitles (manual eng) | 23 | 7 | 0 | 0.6 s | 3.9 s |
-| Local file, three [LibriVox](https://librivox.org) public-domain readings | 1:17 | speech to text (base.en) | 126 | 15 | 0 | 5.8 s | 5.9 s |
+| Local file, three [LibriVox](https://librivox.org) public-domain readings | 1:17 | speech to text (base.en, with `--lang en`) | 126 | 15 | 0 | 5.8 s | 5.9 s |
 
 The other doors, forced with `--doors` on the same videos:
 
@@ -208,19 +208,26 @@ python scripts/mutation_check.py    # breaks each door and guard on purpose; eac
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Unlicense | Dependency: metadata, chapters, caption files, media downloads. Borrowed: ranking audio by language preference (its `-S lang` sort) to avoid dubbed tracks, and its `-orig` mark for the spoken caption track. Its Vimeo and Wistia extractors showed where each player keeps its captions. |
 | [yt-dlp-ejs](https://github.com/yt-dlp/ejs) | Unlicense (bundled parts MIT and ISC) | Dependency through `yt-dlp[default]`: YouTube's challenge solver. |
 | [youtube-transcript-api](https://github.com/jdepoix/youtube-transcript-api) | MIT | Dependency: the YouTube caption door. Borrowed: mapping its error classes (blocked, disabled, not found) to the next door. |
-| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT | Optional dependency: the speech door and its models. |
+| [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT | Optional dependency (`[speech]`): the speech door. |
+| [Whisper](https://github.com/openai/whisper) models, converted by SYSTRAN ([base.en](https://huggingface.co/Systran/faster-whisper-base.en), [base](https://huggingface.co/Systran/faster-whisper-base)) | MIT | The speech models faster-whisper downloads on first use; not bundled. |
+| [NumPy](https://github.com/numpy/numpy) | BSD-3-Clause (bundled parts under other permissive licenses) | Optional dependency (`[speech]`): hands the decoded audio to the model. |
 | [claude-video](https://github.com/bradautomates/claude-video) | MIT | Design borrowed, no code: captions first, then frames and local speech to text, handed to the agent as a skill. |
 | [summarize](https://github.com/steipete/summarize) | MIT | Idea borrowed, no code: stills taken at scene cuts rather than at even intervals. |
-| [youtube-transcript-mcp](https://github.com/ergut/youtube-transcript-mcp) | MIT | Studied, nothing used: a hosted server reads from cloud addresses, which YouTube treats as cloud; a local command avoids that. |
+| [youtube-transcript-mcp](https://github.com/ergut/youtube-transcript-mcp) | MIT | Studied, nothing used: a hosted server reads from a data-center address, which YouTube often refuses; a local command avoids that. |
 | [WhisperX](https://github.com/m-bain/whisperX) | BSD-2-Clause | Studied, not used: the alternative when you need word-level times and speaker labels. |
 | [PySceneDetect](https://github.com/Breakthrough/PySceneDetect) | BSD-3-Clause | Studied, not used: ffmpeg's scene filter is enough here. |
 | [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and [transcribe-anything](https://github.com/zackees/transcribe-anything) | MIT | Studied, not used: other local speech-to-text routes. |
 | [FFmpeg](https://ffmpeg.org) | LGPL or GPL, by build | External program, called, not bundled. |
 | [Supadata](https://supadata.ai) | commercial service | The optional paid door, written against its public API documentation. |
 
-Example content: the YouTube example is NASA's "What Would It Take To Say We Found Life? We Asked a
-NASA Expert", published under Creative Commons Attribution (as YouTube lists it); the local clip uses
-LibriVox recordings, which are in the public domain.
+Example content:
+
+- The committed example is made from "What Would It Take To Say We Found Life? We Asked a NASA Expert"
+  by NASA Science, under the "Creative Commons Attribution license (reuse allowed)" as YouTube lists
+  it; its attribution and the changes made are in [the example's README](examples/youtube-nasa-podium-test/README.md).
+- The Vimeo and Wistia proof runs read public demo videos that are linked above, not copied: nothing
+  from them is in this repository.
+- The local clip (not included) was cut from LibriVox recordings, which are in the public domain.
 
 ## License
 

@@ -6,7 +6,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
-from video_digest.context import RunContext, lang_matches
+from video_digest.context import RunContext, lang_closeness, lang_matches
 from video_digest.models import Chapter, DoorError, DoorUnavailable, RateLimited
 
 _BOT_WORDS = ("HTTP Error 429", "Too Many Requests", "Sign in to confirm", "not a bot", "rate-limit", "rate limit")
@@ -103,10 +103,14 @@ def pick_audio_format(formats: list[dict[str, Any]]) -> str | None:
     """The original-language audio, never a dub: the trap is that a dubbed track is often the smallest.
 
     Audio-only formats rank by YouTube's language preference, then an "original" note, then the
-    smallest bitrate; with no audio-only format, the smallest format that carries sound.
+    smallest bitrate; with no audio-only format, the smallest format that carries sound. A format whose
+    codecs the site did not name (a direct file, the generic extractor) may carry sound: kept, ranked last.
     """
     def has_audio(f: dict[str, Any]) -> bool:
-        return (f.get("acodec") or "none") != "none" or f.get("vcodec") == "none"
+        return f.get("acodec") != "none"  # None: not named by the site, so maybe
+
+    def known(f: dict[str, Any]) -> int:
+        return int(f.get("acodec") is not None or f.get("vcodec") == "none")
 
     def is_original(f: dict[str, Any]) -> int:
         return int("original" in str(f.get("format_note") or "").lower())
@@ -121,12 +125,13 @@ def pick_audio_format(formats: list[dict[str, Any]]) -> str | None:
     usable = [f for f in formats if f.get("format_id") and has_audio(f)
               and "storyboard" not in str(f.get("format_note") or "").lower()
               and f.get("protocol") not in ("mhtml",)]
-    audio_only = [f for f in usable if (f.get("vcodec") or "none") == "none"]
+    audio_only = [f for f in usable if f.get("vcodec") == "none"
+                  or (f.get("vcodec") is None and f.get("acodec") is not None)]
     if audio_only:
         best = max(audio_only, key=lambda f: (lang_pref(f), is_original(f), -abr(f)))
         return str(best["format_id"])
     if usable:
-        best = min(usable, key=lambda f: (-lang_pref(f), -is_original(f), f.get("height") or 1e9, abr(f)))
+        best = min(usable, key=lambda f: (-known(f), -lang_pref(f), -is_original(f), f.get("height") or 1e9, abr(f)))
         return str(best["format_id"])
     return None
 
@@ -188,7 +193,10 @@ def pick_caption(info: dict[str, Any], lang: str | None, original: str | None
     want = lang or spoken
 
     def find(tracks: dict[str, Any], match: str | None, auto_only_original: bool) -> tuple[str, dict] | None:
-        for key, entries in tracks.items():
+        items = list(tracks.items())
+        if match:  # the exact tag first (en-US over en when en-US is asked); the sort keeps the site's order
+            items.sort(key=lambda kv: -lang_closeness(kv[0][:-5] if kv[0].endswith("-orig") else kv[0], match))
+        for key, entries in items:
             if key == "live_chat":
                 continue
             base = key[:-5] if key.endswith("-orig") else key
