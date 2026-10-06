@@ -45,6 +45,8 @@ def _digest_parser() -> argparse.ArgumentParser:
     p.add_argument("--force", action="store_true", help="with --init: overwrite an existing digest.json")
     p.add_argument("--check-only", action="store_true", help="check, write nothing")
     p.add_argument("--draft", action="store_true", help="write the pages even with problems, misses marked")
+    p.add_argument("--snap", action="store_true",
+                   help="rewrite each point's time in digest.json to the second its quote starts")
     p.add_argument("--window", type=float, default=digest.DEFAULT_WINDOW,
                    help="seconds either side of a quote's time to search (default 75)")
     return p
@@ -59,6 +61,10 @@ def cmd_digest(argv: list[str]) -> int:
               f"video-digest digest {folder}")
         return 0
     result = digest.check(folder, a.window)
+    if a.snap:
+        moved = digest.snap_times(folder, result)
+        print(f"snapped {moved} point time(s) to where their quotes start")
+        result = digest.check(folder, a.window)
     matched = sum(1 for q in result.quotes if q["found_at"])
     print(f"quotes: {matched} of {len(result.quotes)} found within {a.window:.0f} s")
     for prob in result.problems:

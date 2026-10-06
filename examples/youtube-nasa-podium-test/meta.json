@@ -1,0 +1,49 @@
+{
+  "source": "https://www.youtube.com/watch?v=6SDVw1PYYcw",
+  "kind": "youtube",
+  "id": "6SDVw1PYYcw",
+  "title": "What Would It Take To Say We Found Life? We Asked a NASA Expert",
+  "uploader": "NASA Science",
+  "channel": "NASA Science",
+  "upload_date": "20250910",
+  "duration": 207,
+  "license": "Creative Commons Attribution license (reuse allowed)",
+  "webpage_url": "https://www.youtube.com/watch?v=6SDVw1PYYcw",
+  "extractor_key": "Youtube",
+  "description": "What would it take to say: We found life beyond Earth?\n\nBefore NASA scientists make that claim, they have to be absolutely sure, from ruling out contamination to spotting chemical signals. Watch as a NASA expert explains how scientists would actually confirm evidence of life and why the bar is astronomically high.\n\nLearn more: https://science.nasa.gov/exoplanets/can-we-find-life/?utm_source=science&utm_medium=youtube&utm_campaign=2026\n\nProducers: Scott Bednar, Pedro Cota, Jessie Wilde\nEditor: Pedro Cota\n\nCredit: NASA",
+  "caption_tracks": {
+    "manual": [
+      "en-US"
+    ],
+    "automatic_original": []
+  },
+  "door": "youtube-transcript-api",
+  "track": "en-US (manual)",
+  "language": "en-US",
+  "generated": false,
+  "words": 668,
+  "lines": 139,
+  "chapters": 5,
+  "attempts": [
+    {
+      "door": "youtube-api",
+      "ok": true,
+      "kind": "ok",
+      "error": "",
+      "seconds": 1.06,
+      "words": 668
+    }
+  ],
+  "transcript_notes": {},
+  "tool": "video-digest 0.1.0",
+  "created_at": "2026-10-06T02:08:14+00:00",
+  "stills": {
+    "mode": "auto",
+    "pointing_phrases": 0,
+    "per_minute": 0.0,
+    "screen_demo": false,
+    "taken": 0,
+    "reason": "not a screen demo (pass --stills to force)"
+  },
+  "wall_seconds": 7.41
+}

@@ -187,6 +187,14 @@ def test_check_refuses_a_missing_quote_a_placeholder_time_and_disordered_chapter
     assert "'1:00:1x' is not a time" in text and "not after the chapter before it" in text
 
 
+def test_snap_moves_each_point_to_where_its_quote_starts(tmp_path):
+    d = json.loads(json.dumps(GOOD))
+    d["points"][0]["time"] = "0:01:20"
+    folder = _folder(tmp_path, d)
+    assert digest.snap_times(folder, digest.check(folder)) == 1
+    assert json.loads((folder / "digest.json").read_text())["points"][0]["time"] == "0:01:00"
+
+
 def test_init_writes_a_skeleton_and_a_reading_file(tmp_path):
     folder = _folder(tmp_path, None)
     digest.init(folder)

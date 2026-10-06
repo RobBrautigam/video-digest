@@ -195,6 +195,20 @@ def check(folder: Path, window: float = DEFAULT_WINDOW) -> CheckResult:
     return CheckResult(problems, quotes, window)
 
 
+def snap_times(folder: Path, result: CheckResult) -> int:
+    """Set each point's time to the second its quote was found at; returns how many moved."""
+    path = folder / "digest.json"
+    d = json.loads(path.read_text(encoding="utf-8"))
+    moved = 0
+    for q in result.quotes:
+        p = d["points"][q["point"] - 1]
+        if q["found_at"] and p.get("time") != q["found_at"]:
+            p["time"] = q["found_at"]
+            moved += 1
+    path.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    return moved
+
+
 # --- rendering ------------------------------------------------------------------------------------
 
 def time_link(source: str | None, kind: str | None, vid: str | None, seconds: float) -> str | None:

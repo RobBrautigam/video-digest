@@ -192,10 +192,10 @@ def test_vimeo_page_text_tracks(make_ctx):
     fetch = FakeFetch({
         "https://player.vimeo.com/video/76979871/config": json.dumps(
             {"request": {"text_tracks": [{"lang": "en", "url": "/texttrack/1.vtt?token=x", "kind": "captions"}]}}),
-        "https://vimeo.com/texttrack/1.vtt": VTT,
+        "https://player.vimeo.com/texttrack/1.vtt": VTT,
     })
     t = page_captions.run(make_ctx("https://vimeo.com/76979871", fetch=fetch))
-    assert t.lines[0].start == 1.0 and fetch.calls[-1] == "https://vimeo.com/texttrack/1.vtt?token=x"
+    assert t.lines[0].start == 1.0 and fetch.calls[-1] == "https://player.vimeo.com/texttrack/1.vtt?token=x"
     assert t.notes["page_meta"] == {}
     empty = FakeFetch({"https://player.vimeo.com/video/76979871/config": json.dumps({"request": {}})})
     with pytest.raises(NoCaptions):
@@ -212,7 +212,7 @@ def test_page_pick_with_no_language_asked_is_not_the_default_translation(make_ct
         "https://player.vimeo.com/video/76979871/config": json.dumps(
             {"video": {"title": "Player", "duration": 62, "owner": {"name": "Owner"}},
              "request": {"text_tracks": tracks}}),
-        "https://vimeo.com/t/en.vtt": VTT,
+        "https://player.vimeo.com/t/en.vtt": VTT,
     })
     t = page_captions.run(make_ctx("https://vimeo.com/76979871", fetch=fetch))
     assert t.language == "en" and t.notes["language_guessed"] is True

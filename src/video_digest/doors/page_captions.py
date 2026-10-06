@@ -90,7 +90,7 @@ def vimeo(ctx: RunContext) -> Transcript:
         raise NoCaptions(f"the Vimeo player lists no {ctx.lang or ''} text tracks "
                          f"(has: {', '.join(str(t.get('lang')) for t in tracks) or 'none'}); next door: speech")
     ctx.polite()
-    vtt = ctx.fetch(urljoin("https://vimeo.com", track["url"])).decode("utf-8", "replace")
+    vtt = ctx.fetch(urljoin("https://player.vimeo.com/", track["url"])).decode("utf-8", "replace")
     lines = parse_vtt(vtt)
     if not lines:
         raise NoCaptions("the Vimeo text track was empty; next door: speech")
