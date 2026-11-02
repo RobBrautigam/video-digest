@@ -341,7 +341,7 @@ The plugin carries the skill only; the `video-digest` command comes from the pac
 ## Development
 
 ```
-pip install -e ".[speech,dev]"
+pip install -e ".[speech,dev]"      # ".[dev]" alone works too; the one test that needs numpy is skipped
 pytest                              # no test touches the network
 python scripts/mutation_check.py    # breaks each door and guard on purpose; each must turn its test red
 ```

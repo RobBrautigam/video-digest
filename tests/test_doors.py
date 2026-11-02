@@ -235,7 +235,7 @@ class FakeModel:
 
 
 def test_speech_door_reads_segments(make_ctx, tmp_path):
-    import numpy as np
+    np = pytest.importorskip("numpy", reason="numpy comes with the [speech] extra")
 
     ctx = make_ctx(YT)
     ctx.original_language = "en"
