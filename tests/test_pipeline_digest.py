@@ -102,6 +102,7 @@ def test_a_failed_probe_is_tried_once_and_the_player_supplies_the_title(tmp_path
     assert probes == [1]
     assert (meta["title"], meta["duration"], meta["door"]) == ("Player video", 62, "page captions")
     assert "## Transcript" in (folder / "transcript.md").read_text(encoding="utf-8")
+    assert "Player video" in (folder / "transcript.html").read_text(encoding="utf-8")  # the page, from the run
 
 
 def test_polite_pacing_waits_between_requests(tmp_path):

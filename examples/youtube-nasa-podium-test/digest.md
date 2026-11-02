@@ -10,13 +10,13 @@ A NASA scientist answers the "podium test": what evidence would let a scientist 
 
 ## Chapters
 
-| Start | Chapter | Speakers | Summary |
-|---|---|---|---|
-| 0:00:00 | The search for subtle signs | NASA scientist (name not in the captions) | Sets up the podium test. The bar is high, and the first evidence is likely to be subtle chemistry rather than a skeleton or a technology signature. |
-| 0:00:35 | Contextualizing the search | NASA scientist | What we see depends on where we look: ancient, degraded samples on Mars; tiny samples from the ocean worlds Europa and Enceladus; planet-scale signs such as an oxygenated atmosphere for exoplanets. |
-| 0:01:26 | Verifying signals | NASA scientist | General principles: first make sure the signal is real, and treat life as the hypothesis of last resort. |
-| 0:02:06 | Ruling out contamination | NASA scientist | Instruments are built on a planet full of life, so Earth contamination must be excluded, then whether life could live there, then every non-living process that could make the same signal. |
-| 0:02:39 | Community scrutiny | NASA scientist | Independent lines of evidence build confidence, and the claim stands only after the whole scientific community has examined it. |
+| Start | Length | Words | Chapter | Speakers | Summary |
+|---|--:|--:|---|---|---|
+| 0:00:00 | 0:00:35 | 119 | The search for subtle signs | NASA scientist (name not in the captions) | Sets up the podium test. The bar is high, and the first evidence is likely to be subtle chemistry rather than a skeleton or a technology signature. |
+| 0:00:35 | 0:00:51 | 167 | Contextualizing the search | NASA scientist | What we see depends on where we look: ancient, degraded samples on Mars; tiny samples from the ocean worlds Europa and Enceladus; planet-scale signs such as an oxygenated atmosphere for exoplanets. |
+| 0:01:26 | 0:00:40 | 135 | Verifying signals | NASA scientist | General principles: first make sure the signal is real, and treat life as the hypothesis of last resort. |
+| 0:02:06 | 0:00:33 | 117 | Ruling out contamination | NASA scientist | Instruments are built on a planet full of life, so Earth contamination must be excluded, then whether life could live there, then every non-living process that could make the same signal. |
+| 0:02:39 | 0:00:48 | 130 | Community scrutiny | NASA scientist | Independent lines of evidence build confidence, and the claim stands only after the whole scientific community has examined it. |
 
 ## Methods
 
@@ -60,3 +60,11 @@ A NASA scientist answers the "podium test": what evidence would let a scientist 
 ## Actions for you
 
 1. When you evaluate a bold claim in your own field, run the same three checks in order: is the signal real, is it contamination, is there another explanation. (see 0:01:42)
+
+## How this page was made
+
+- The words: youtube-transcript-api, en-US (manual), 668 words in 139 timed lines. Doors tried: youtube-api answered.
+- The quote check: 12 of 12 quotes found in the transcript within 75 seconds of their time, by script, before this page was written.
+- Gaps in the words: the longest stretch with no words on the track is under a second.
+- What a script cannot check: a quote given to the wrong speaker or read out of its context; those are read by hand.
+- The transcript was made with video-digest 0.1.0 and this page with video-digest 0.2.0; neither calls a language model.

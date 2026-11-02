@@ -1,0 +1,23 @@
+{
+  "name": "video-digest",
+  "version": "0.2.0",
+  "description": "Turn a video (YouTube, Vimeo, Wistia, any yt-dlp site, a local file) into a timed transcript and a chaptered digest whose every quote is checked against the transcript by script. Free caption doors first, local speech to text second.",
+  "author": {
+    "name": "video-digest contributors"
+  },
+  "homepage": "https://github.com/RobBrautigam/video-digest",
+  "repository": "https://github.com/RobBrautigam/video-digest",
+  "license": "MIT",
+  "keywords": [
+    "video",
+    "transcript",
+    "captions",
+    "youtube",
+    "vimeo",
+    "wistia",
+    "whisper",
+    "yt-dlp",
+    "digest",
+    "quotes"
+  ]
+}
