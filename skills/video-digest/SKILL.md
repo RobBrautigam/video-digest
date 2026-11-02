@@ -18,10 +18,11 @@ transcript, at the time you say, before anyone reads it.
 
 1. `pip install "video-digest[speech] @ git+https://github.com/RobBrautigam/video-digest"` (or `pip install ".[speech]"` from a clone).
 2. ffmpeg on PATH. For YouTube media downloads (only needed for speech to text and stills), a JavaScript runtime on PATH (deno or Node.js); yt-dlp uses it to answer YouTube's challenge.
-3. The skill: as a Claude Code plugin, `/plugin install video-digest --marketplace RobBrautigam/video-digest`
-   (or `/plugin marketplace add RobBrautigam/video-digest`, then `/plugin install video-digest@video-digest`);
-   or copy this folder to `~/.claude/skills/video-digest/` (every project) or
-   `<project>/.claude/skills/video-digest/` (one project).
+3. The skill: as a Claude Code plugin, `/plugin marketplace add RobBrautigam/video-digest`, then
+   `/plugin install video-digest@video-digest` (Claude Code 2.1.275 or later also takes the one command
+   `/plugin install video-digest --marketplace RobBrautigam/video-digest`); or copy this folder to
+   `~/.claude/skills/video-digest/` (every project) or `<project>/.claude/skills/video-digest/` (one
+   project).
 4. Check: `video-digest --version`.
 
 ## The method

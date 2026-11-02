@@ -20,6 +20,8 @@ DEFAULT_WINDOW = 75.0  # seconds either side of a quote's stated time
 KINDS = ("method", "claim", "number", "tool", "example", "warning", "quote")
 # H:MM:SS or M:SS, and the placeholders that look like one (1:00:1x, 0:4?); a ratio like 16:9 is not a time
 _TIME_LIKE = re.compile(r"(?<![\w:])\d{1,2}:[0-5x?][\dx?](?::[0-5x?][\dx?])?(?![\w:])", re.I)
+# Sound tags in a caption track ([Music], (applause), note signs): heard, but not spoken words
+SOUND_TAG = re.compile(r"\[[^\]]*\]|\([^)]*\)|[♪♫]")
 
 
 @dataclass
@@ -48,7 +50,7 @@ def word_index(lines: list[dict[str, Any]]) -> list[Word]:
         if k + 1 < len(lines):
             gap = float(lines[k + 1]["start"]) - start
             if gap > 0:
-                span = min(span, gap)
+                span = min(span, gap) if span > 0 else gap  # a line with no length runs to the next one
         for i, tok in enumerate(toks):
             out.append(Word(_norm(tok), start + span * i / n))
     return out
@@ -96,12 +98,18 @@ def _load(folder: Path, name: str) -> Any:
 
 
 PARA_MIN, PARA_MAX = 30.0, 45.0  # seconds: a paragraph ends at a sentence end after 30 s, or at 45 s
+_CLOSERS = "\"')]”’"  # closing quotes and brackets after a sentence's last mark
+
+
+def _ends_sentence(text: str) -> bool:
+    return text.rstrip(_CLOSERS).endswith((".", "?", "!", "…"))
 
 
 def paragraphs(lines: list[dict[str, Any]], least: float = PARA_MIN, most: float = PARA_MAX
                ) -> list[tuple[float, str]]:
     """The lines as (start, text) paragraphs: each ends at the first sentence end after `least` seconds,
-    or at `most` seconds when the speaker never ends a sentence (automatic captions carry no full stops)."""
+    or before the first line that starts `most` seconds or more after it began (automatic captions carry
+    no full stops). A line said after a long silence opens its own paragraph, under its own time."""
     out: list[tuple[float, str]] = []
     buf: list[str] = []
     mark: float | None = None
@@ -109,11 +117,14 @@ def paragraphs(lines: list[dict[str, Any]], least: float = PARA_MIN, most: float
         text = str(ln["text"]).strip()
         if not text:
             continue
+        start = float(ln["start"])
+        if mark is not None and start - mark >= most:
+            out.append((mark, " ".join(buf)))
+            buf, mark = [], None
         if mark is None:
-            mark = float(ln["start"])
+            mark = start
         buf.append(text)
-        age = float(ln["start"]) - mark
-        if (age >= least and text.endswith((".", "?", "!", '."', '?"', '!"'))) or age >= most:
+        if start - mark >= least and _ends_sentence(text):
             out.append((mark, " ".join(buf)))
             buf, mark = [], None
     if buf and mark is not None:
@@ -163,9 +174,12 @@ class CheckResult:
 
 
 def _time_tokens_ok(text: str) -> list[str]:
-    """A time-like token that is not a full H:MM:SS or M:SS (a placeholder such as 1:00:1x) is refused."""
+    """A placeholder time (a time-like token holding an x or a ?, such as 1:00:1x) is refused. A token of
+    digits only that is not a time is a ratio (16:9, 80:20), not a placeholder, and passes."""
     bad = []
     for m in _TIME_LIKE.finditer(text or ""):
+        if not re.search(r"[x?]", m.group(0), re.I):
+            continue
         try:
             parse_stamp(m.group(0))
         except ValueError:
@@ -220,6 +234,9 @@ def check(folder: Path, window: float = DEFAULT_WINDOW) -> CheckResult:
     quotes: list[dict[str, Any]] = []
 
     def at(value: Any, where: str) -> float | None:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            problems.append(f"{where}: has no time (write H:MM:SS)")
+            return None
         try:
             t = parse_stamp(value)
         except (ValueError, AttributeError, TypeError):
@@ -266,7 +283,8 @@ def check(folder: Path, window: float = DEFAULT_WINDOW) -> CheckResult:
         t = at(a["time"], where) if a.get("time") else None
         if (a.get("quote") or "").strip() and not a.get("time"):
             problems.append(f"{where}: a quote needs the time it was said")
-        quoted(a, where, {"action": i + 1}, t)
+        else:
+            quoted(a, where, {"action": i + 1}, t)
     _prose_times(d, "", problems)
     return CheckResult(problems, quotes, window)
 
@@ -320,7 +338,8 @@ LABELS = {"method": "Methods", "claim": "Claims", "number": "Numbers", "tool": "
 def chapter_spans(d: dict[str, Any], meta: dict[str, Any], lines: list[dict[str, Any]] | None
                   ) -> list[dict[str, Any]]:
     """Each digest chapter's end, length and words counted on the transcript (None when no lines given).
-    A chapter with a malformed start gets no span; the first takes any words before it, the last any after."""
+    A chapter with a malformed start, or one that ends before it starts (chapters out of order on a draft),
+    gets no span; the first good chapter takes any words before it, the last any after."""
     chs = d.get("chapters") or []
     starts: list[float | None] = []
     for ch in chs:
@@ -330,26 +349,35 @@ def chapter_spans(d: dict[str, Any], meta: dict[str, Any], lines: list[dict[str,
             starts.append(None)
     last_word = max((float(ln["start"]) + float(ln.get("dur") or 0) for ln in lines or []), default=0.0)
     end_all = max(float(meta.get("duration") or 0), last_word)
+    first = next((i for i, s in enumerate(starts) if s is not None), None)
     out = []
     for i, a in enumerate(starts):
         nxt = next((s for s in starts[i + 1:] if s is not None), None)
         b = nxt if nxt is not None else end_all
-        span: dict[str, Any] = {"start": a, "end": None if a is None else b, "words": None}
-        if a is not None and lines is not None:
-            lo = 0.0 if i == 0 else a
+        a_ok = a is not None and b >= a
+        span: dict[str, Any] = {"start": a, "end": b if a_ok else None, "words": None}
+        if a_ok and lines is not None:
+            lo = 0.0 if i == first else a
             span["words"] = sum(len(str(ln["text"]).split()) for ln in lines
                                 if lo <= float(ln["start"]) < b or (nxt is None and float(ln["start"]) >= b))
         out.append(span)
     return out
 
 
-def longest_gap(lines: list[dict[str, Any]]) -> tuple[float, float]:
-    """The longest stretch with no words on the track: (where it starts, how long), in seconds."""
-    best, at = 0.0, 0.0
-    for prev, nxt in zip(lines, lines[1:]):
-        end = float(prev["start"]) + float(prev.get("dur") or 0)
-        if float(nxt["start"]) - end > best:
-            best, at = float(nxt["start"]) - end, end
+def longest_gap(lines: list[dict[str, Any]], duration: float = 0.0) -> tuple[float, float]:
+    """The longest stretch with no spoken words: (where it starts, how long), in seconds. It counts the
+    stretch before the first line and after the last (to `duration`), and a line of sound tags only, such
+    as [Music], holds no words."""
+    best, at, end = 0.0, 0.0, 0.0
+    for ln in lines:
+        if not SOUND_TAG.sub(" ", str(ln["text"])).split():
+            continue
+        start = float(ln["start"])
+        if start - end > best:
+            best, at = start - end, end
+        end = max(end, start + float(ln.get("dur") or 0))
+    if duration - end > best:
+        best, at = duration - end, end
     return at, best
 
 
@@ -366,7 +394,7 @@ def how_made(meta: dict[str, Any], result: CheckResult, lines: list[dict[str, An
            "What a script cannot check: a quote given to the wrong speaker or read out of its context; "
            "those are read by hand."]
     if lines:
-        at, gap = longest_gap(lines)
+        at, gap = longest_gap(lines, float(meta.get("duration") or 0))
         out.insert(2, "Gaps in the words: the longest stretch with no words on the track is "
                       + (f"{stamp(gap)} long, from {stamp(at)} (music, a demo or a missed caption; nothing "
                          "here is drawn from it)." if gap >= 1 else "under a second."))
@@ -414,7 +442,7 @@ def render_markdown(d: dict[str, Any], meta: dict[str, Any], result: CheckResult
         cells = [_md_cell(ch.get("start")), _md_cell(ch.get("title")), _md_cell(", ".join(ch.get("speakers") or [])),
                  _md_cell(ch.get("summary"))]
         if lines is not None:
-            length = stamp(sp["end"] - sp["start"]) if sp["start"] is not None else ""
+            length = stamp(sp["end"] - sp["start"]) if sp["end"] is not None else ""
             words = f"{sp['words']:,}" if sp["words"] is not None else ""
             cells[1:1] = [length, words]
         out.append("| " + " | ".join(cells) + " |")

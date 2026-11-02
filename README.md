@@ -31,20 +31,23 @@ transcript files, the filled `digest.json`, the quote check and all three pages.
 
 - **A transcript page for people.** Every run writes `transcript.html`: the whole text under its
   chapters, cut into paragraphs of 30 to 45 seconds (a paragraph ends at the first sentence end after
-  30 seconds, or at 45), each paragraph's time a link into the video, each chapter a fold, long
-  chapters split into several folds. `video-digest page <folder>` writes it again on its own.
+  30 seconds, or at 45; a line after a long silence starts its own), each paragraph's time a link into
+  the video on YouTube and Vimeo, each chapter a fold, long chapters split into several folds.
+  `video-digest page <folder>` writes it again on its own.
 - **More of the digest is checked.** Quotes in the "actions for you" section and in new optional
   `sections[]` (any extra section you want, such as "what we could borrow") are checked against the
   transcript like the main points, and `--snap` moves them too. A placeholder time such as `1:00:1x`
-  is refused anywhere in the digest, your own summaries and titles included.
+  is refused anywhere in the digest, your own summaries and titles included; a ratio such as 16:9 or
+  80:20 is not a placeholder and passes.
 - **Quote links no longer open late on automatic captions.** Automatic caption lines overlap the next
-  line on screen; the word clock now spreads each line's words over the time until the next line
-  starts, so a quote's time is the second it was said.
+  line on screen; when they do, the word clock now spreads a line's words over the time until the next
+  line starts instead of the whole time it is shown, so a quote's time is no longer late.
 - **The digest page says how it was made:** each chapter's length and word count, the doors tried,
-  the quote count, the longest stretch with no words on the track, and the versions that made it.
-- **A near-empty caption track no longer ends the run.** A track with almost no words for the video's
-  length (a music-only track, a placeholder) is kept in reserve while the next doors try; the answer
-  with the most spoken words wins, and a thin answer that is kept says so in `meta.json`.
+  the quote count, the longest stretch with no spoken words (intro and outro music included), and the
+  versions that made it.
+- **A near-empty track no longer ends the run.** An answer with almost no words for the video's
+  length (a music-only caption track, a placeholder) is kept in reserve while the next doors try; the
+  answer with the most spoken words wins, and a thin answer that is kept says so in `meta.json`.
 - **Install the skill as a Claude Code plugin** in two commands (below).
 
 The full list is in [CHANGELOG.md](CHANGELOG.md).
@@ -126,14 +129,14 @@ Open a new terminal after installing so the PATH change is seen.
 flowchart TD
     S["a link or a local file"] --> Y["caption library (YouTube)"]
     Y -->|"no track, refused or thin"| D["yt-dlp subtitles"]
-    D -->|"none"| P["the player's caption file (Vimeo, Wistia)"]
-    P -->|"none"| W["speech to text on your machine"]
-    W -->|"failed"| X["paid door, off unless --allow-paid"]
+    D -->|"none or thin"| P["the player's caption file (Vimeo, Wistia)"]
+    P -->|"none or thin"| W["speech to text on your machine"]
+    W -->|"failed or thin"| X["paid door, off unless --allow-paid"]
     Y & D & P & W & X -->|"timed lines"| T["transcript.md, .json, .html and meta.json"]
     T --> G["you or an agent fill digest.json"]
     G --> C{"video-digest digest: every quote checked"}
     C -->|"a miss: fix it from the transcript"| G
-    C -->|"all found"| H["digest.md and digest.html"]
+    C -->|"all found"| H["digest.md, digest.html and transcript.html"]
 ```
 
 Each door either returns timed lines or says why not, and the run moves to the next. A refusal (HTTP
@@ -167,11 +170,13 @@ Each door either returns timed lines or says why not, and the run moves to the n
    `--allow-paid` and your own `SUPADATA_API_KEY`, and asks for existing captions only unless you set
    `VIDEO_DIGEST_SUPADATA_MODE`.
 
-**A thin caption track keeps the run going.** On a video of a minute or more, a caption answer with
-fewer than 5 spoken words a minute (sound tags such as `[Music]` and `(applause)` do not count) is
-kept in reserve and the next door runs. The answer with the most spoken words wins; a thin answer that
-is kept carries `transcript_notes.thin_transcript` in `meta.json`, and the attempt shows `"kind":
-"Thin"`.
+**A thin answer keeps the run going.** On a video of a minute or more, an answer with fewer than 5
+spoken words a minute (sound tags such as `[Music]` and `(applause)` do not count) is kept in reserve
+and the next door runs. The video's length comes from its metadata, read before the first answer is
+judged, so a few seconds of `[Music]` on a forty-minute video counts as thin. The answer with the most
+spoken words wins: in `meta.json`'s `attempts`, a door that answered thin shows `"kind": "Thin"`, a
+later one that heard less shows `"kind": "Fewer words"`, and a thin answer that is kept is marked
+`"kept": true` and carries `transcript_notes.thin_transcript`.
 
 `--doors` restricts or reorders them (`--doors speech` forces speech to text), and `--lang` asks for
 a language instead of the spoken one.
@@ -256,11 +261,12 @@ What goes in `digest.json` (the example's [`digest.json`](examples/youtube-nasa-
   "sections": [{"title": "What we could borrow", "intro": "Optional, one line.",
                 "rows": [{"time": "0:01:46", "text": "Your words.",
                           "quote": "Are we sure we're seeing what we think we're seeing", "speaker": "..."}]}],
-  "actions": [{"time": "0:01:42", "text": "A concrete step for the reader.", "quote": "optional, checked when present"}]
+  "actions": [{"time": "0:01:42", "text": "A concrete step for the reader."}]
 }
 ```
 
-`kind` is one of method, claim, number, tool, example, warning or quote. A problem is:
+`kind` is one of method, claim, number, tool, example, warning or quote. An action may carry a
+`quote` too, checked like the others. A problem is:
 
 - a quote (in a point, a section row or an action) not found in the transcript, in order, within 75
   seconds of its time (`--window` to change);
@@ -273,9 +279,9 @@ The HTML pages are single files with no scripts and nothing loaded from elsewher
 and dark mode, with a section list beside the text on wide screens and links that open the video at
 each time on YouTube and Vimeo. The digest page links the transcript page and the transcript page
 links back. The digest page ends with how it was made: the doors tried, the quote count, the longest
-stretch with no words, and the version of the tool. The transcript page opens with the door, the
-track, whether its captions were automatic, and the longest stretch with no words; each chapter's
-fold opens on a click.
+stretch with no spoken words, and the version of the tool. The transcript page opens with the door,
+the track, whether its captions were automatic (or that it is speech to text), and the longest
+stretch with no spoken words; each chapter's fold opens on a click.
 
 ![The transcript page from the committed example: chapters with their length and word count, and the text in timed paragraphs](docs/transcript-page.png)
 

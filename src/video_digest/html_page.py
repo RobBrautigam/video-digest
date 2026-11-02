@@ -114,7 +114,7 @@ def render_html(d: dict[str, Any], meta: dict[str, Any], result: CheckResult,
     for ch, sp in zip(d.get("chapters") or [], chapter_spans(d, meta, lines)):
         cells = f"<td class=\"t\">{_t(ch.get('start', ''), meta)}</td>"
         if counted:
-            length = stamp(sp["end"] - sp["start"]) if sp["start"] is not None else ""
+            length = stamp(sp["end"] - sp["start"]) if sp["end"] is not None else ""
             words = f"{sp['words']:,}" if sp["words"] is not None else ""
             cells += f'<td class="n">{escape(length)}</td><td class="n">{escape(words)}</td>'
         body.append(f"<tr>{cells}<td>{escape(str(ch.get('title') or ''))}</td>"
@@ -176,9 +176,10 @@ def write_transcript_page(folder: Path) -> Path:
     if (folder / "digest.json").exists():
         try:
             d = json.loads((folder / "digest.json").read_text(encoding="utf-8"))
-            mine = [{"start": parse_stamp(c["start"]), "title": c.get("title") or "Untitled"}
-                    for c in d.get("chapters") or []]
-            if mine and any(str(c["title"]).strip() for c in mine):
+            raw = d.get("chapters") or []
+            mine = [{"start": parse_stamp(c["start"]), "title": str(c.get("title") or "").strip() or "Untitled"}
+                    for c in raw]
+            if mine and any(str(c.get("title") or "").strip() for c in raw):
                 chapters = mine
         except (ValueError, KeyError, TypeError, AttributeError, json.JSONDecodeError):
             pass  # a digest still being written: the video's own chapters
@@ -203,12 +204,15 @@ def render_transcript_html(meta: dict[str, Any], chapters: list[dict[str, Any]],
         chs = [{"start": 0.0, "title": "Transcript"}]
     title = str(meta.get("title") or meta.get("id") or "Transcript")
     total = sum(len(str(ln["text"]).split()) for ln in lines)
-    gen = {True: "automatic", False: "manual"}.get(meta.get("generated"), "not stated")
+    if meta.get("door") == "speech":
+        how = "speech to text"
+    else:
+        how = "captions " + {True: "automatic", False: "manual"}.get(meta.get("generated"), "not stated")
     body = [f"<h1>{escape(title)}</h1>", '<ul class="meta">',
             f"<li>Source: {_source(str(meta.get('source') or ''))}</li>",
             f"<li>Length {escape(stamp(end_all))}; {total:,} words from {escape(str(meta.get('door')))} "
-            f"({escape(str(meta.get('track') or 'track not named'))}, captions {gen})</li>"]
-    gap_at, gap = longest_gap(lines)
+            f"({escape(str(meta.get('track') or 'track not named'))}, {how})</li>"]
+    gap_at, gap = longest_gap(lines, end_all)
     if gap >= 1:
         body.append(f"<li>Longest stretch with no words: {escape(stamp(gap))}, from {_t(stamp(gap_at), meta)}</li>")
     if digest_page:

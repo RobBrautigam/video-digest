@@ -92,7 +92,11 @@ def test_a_placeholder_time_is_refused_anywhere_in_the_prose(tmp_path):
     for where in ("summary: '0:1x'", "section 1 intro: '1:00:1x'", "action 1 text: '2:3x'",
                   "chapter 2 title: '4:?0'"):
         assert where in text, text
-    assert digest.check(_folder(tmp_path, GOOD)).ok  # a real time in prose (none here) and a 16:9 ratio pass
+    assert digest.check(_folder(tmp_path, GOOD)).ok
+    ratios = json.loads(json.dumps(GOOD))
+    ratios["title"] = "The 80:20 rule"
+    ratios["summary"] = "Shot at 16:9, split 70:30, the key line at 0:01:00."
+    assert digest.check(_folder(tmp_path, ratios)).ok  # ratios and a real time are not placeholders
 
 
 # --- the transcript page ----------------------------------------------------------------------------
@@ -102,9 +106,21 @@ def test_paragraphs_end_at_a_sentence_after_thirty_seconds_or_at_forty_five():
              [(0, "First thought."), (20, "Still going."), (31, "Ends here."), (40, "next part with no stop"),
               (60, "and on"), (86, "and on"), (90, "Done.")]]
     paras = digest.paragraphs(lines)
-    assert [t for t, _ in paras] == [0.0, 40.0, 90.0]
+    assert [t for t, _ in paras] == [0.0, 40.0, 86.0]  # 86 s is 45 s or more after 40 s: a new paragraph
     assert paras[0][1] == "First thought. Still going. Ends here."
     assert digest.reading_file(lines).startswith("[0:00:00] First thought.")
+    curly = [{"start": 0.0, "dur": 2.0, "text": "He said"}, {"start": 31.0, "dur": 2.0, "text": "“stop.”"},
+             {"start": 33.0, "dur": 2.0, "text": "Next."}]
+    assert [t for t, _ in digest.paragraphs(curly)] == [0.0, 33.0]  # a closing quote after the stop
+
+
+def test_a_line_after_a_long_silence_opens_its_own_paragraph_at_its_own_time():
+    lines = [{"start": 100.0, "dur": 3.0, "text": "Before the demo we set things up"},
+             {"start": 400.0, "dur": 3.0, "text": "Now the price is ninety dollars."},
+             {"start": 404.0, "dur": 3.0, "text": "That is all."}]
+    paras = digest.paragraphs(lines)
+    assert paras[0] == (100.0, "Before the demo we set things up")
+    assert paras[1][0] == 400.0 and paras[1][1].startswith("Now the price")
 
 
 def test_transcript_page_has_every_chapter_its_words_and_time_links(tmp_path):
@@ -182,3 +198,72 @@ def test_a_short_clip_or_a_full_track_is_not_thin(make_ctx):
                            doors={"ytdlp-subs": lambda c: short, "speech": lambda c: pytest.fail("speech ran")},
                            probe=lambda c: None)
     assert result is short and "thin_transcript" not in result.notes
+
+
+def _words(n: int, every: float, door: str) -> Transcript:
+    return Transcript(lines=[Line(i * every, 1.0, "word") for i in range(n)], door=door)
+
+
+def test_a_later_answer_with_fewer_words_does_not_replace_the_kept_one_and_later_doors_still_run(make_ctx):
+    # no stated length: a 40-word track over ten minutes is thin; a 10-word clip of 30 s is not, but hears less
+    def run(order, doors):
+        return take_doors(make_ctx(YT), order, doors=doors, probe=lambda c: None)
+
+    thin, clip, full = _words(40, 15.0, "ytdlp-subs"), _words(10, 3.0, "speech"), _words(100, 6.0, "paid")
+    result, attempts = run(["ytdlp-subs", "speech", "paid"],
+                           {"ytdlp-subs": lambda c: thin, "speech": lambda c: clip, "paid": lambda c: full})
+    assert result is full  # the door after the shorter answer still ran, and heard the most
+    assert [a["kind"] for a in attempts if a["door"] != "probe"] == ["Thin", "Fewer words", "ok"]
+    result, attempts = run(["ytdlp-subs", "speech"], {"ytdlp-subs": lambda c: thin, "speech": lambda c: clip})
+    assert result is thin and "thin_transcript" in result.notes
+    kept = next(a for a in attempts if a["door"] == "ytdlp-subs")
+    assert kept["ok"] is True and kept.get("kept") is True  # the page names the door the words came from
+    assert next(a for a in attempts if a["door"] == "speech")["kind"] == "Fewer words"
+
+
+def test_a_short_caption_track_is_judged_against_the_video_length_from_the_metadata(make_ctx):
+    def probe(c):
+        c.info = {"duration": 2400}
+
+    music = Transcript(lines=[Line(0.0, 4.0, "[Music]")], door="youtube-api")
+    words = _words(300, 8.0, "ytdlp-subs")
+    result, attempts = take_doors(make_ctx(YT), ["youtube-api", "ytdlp-subs"],
+                                  doors={"youtube-api": lambda c: music, "ytdlp-subs": lambda c: words}, probe=probe)
+    assert result is words
+    assert [a["kind"] for a in attempts] == ["Thin", "ok", "ok"]  # youtube-api, the probe, ytdlp-subs
+
+
+def test_the_longest_stretch_with_no_words_counts_the_intro_the_outro_and_music_lines():
+    intro = [{"start": 180.0, "dur": 5.0, "text": "Hello."}, {"start": 186.0, "dur": 5.0, "text": "Welcome."}]
+    assert digest.longest_gap(intro, 200.0) == (0.0, 180.0)  # three minutes of music before the first word
+    outro = [{"start": 0.0, "dur": 5.0, "text": "Hello."}, {"start": 6.0, "dur": 5.0, "text": "Bye."}]
+    assert digest.longest_gap(outro, 300.0) == (11.0, 289.0)
+    tagged = [{"start": 0.0, "dur": 2.0, "text": "Hi."}, {"start": 2.0, "dur": 100.0, "text": "[Music]"},
+              {"start": 102.0, "dur": 2.0, "text": "Back."}]
+    assert digest.longest_gap(tagged, 104.0) == (2.0, 100.0)
+
+
+def test_an_untimed_action_quote_is_one_problem_and_a_draft_shows_no_negative_length(tmp_path):
+    d = json.loads(json.dumps(GOOD))
+    d["actions"] = [{"text": "Render twice", "quote": "Render every frame again"}]
+    d["sections"][0]["rows"].append({"text": "An open question"})
+    d["chapters"] = list(reversed(d["chapters"]))
+    folder = _folder(tmp_path, d)
+    result = digest.check(folder)
+    assert [p for p in result.problems if p.startswith("action 1")] == ["action 1: a quote needs the time it was said"]
+    assert "section 1 row 2: has no time (write H:MM:SS)" in result.problems
+    assert not any(q.get("action") for q in result.quotes)
+    lines = json.loads((folder / "transcript.json").read_text(encoding="utf-8"))["lines"]
+    meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+    md = digest.render_markdown(d, meta, result, lines)
+    assert "| -" not in md and "| 0:04:00 |  |  | Ending |" in md  # out of order: no length, no words
+
+
+def test_section_text_is_escaped_on_the_digest_page(tmp_path):
+    d = json.loads(json.dumps(GOOD))
+    d["sections"][0]["title"] = "Borrow <b>this</b>"
+    d["sections"][0]["intro"] = "A & B <i>"
+    folder = _folder(tmp_path, d)
+    result = digest.check(folder)
+    page = html_page.render_html(d, json.loads((folder / "meta.json").read_text(encoding="utf-8")), result)
+    assert "Borrow &lt;b&gt;this&lt;/b&gt;" in page and "A &amp; B &lt;i&gt;" in page and "<b>this" not in page

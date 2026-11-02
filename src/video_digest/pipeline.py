@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -11,6 +10,7 @@ from typing import Any, Callable
 
 from video_digest import __version__, html_page, local, stills, ytdlp
 from video_digest.context import RunContext
+from video_digest.digest import SOUND_TAG
 from video_digest.doors import page_captions, paid, sidecar, speech, youtube_api, ytdlp_subs
 from video_digest.models import Chapter, DoorError, NoCaptions, RateLimited, Refused, Transcript
 from video_digest.output import write_all, write_json
@@ -98,7 +98,7 @@ def _probe_attempt(ctx: RunContext, probe: Callable[[RunContext], Any]) -> dict[
 
 THIN_MIN_SECONDS = 60.0  # a track is judged thin only on a video at least this long
 THIN_WORDS_PER_MINUTE = 5.0  # speech runs at about 150 words a minute; under 5 is a music or placeholder track
-_SOUND_TAG = re.compile(r"\[[^\]]*\]|\([^)]*\)|[♪♫]")
+_SOUND_TAG = SOUND_TAG
 
 
 def spoken_words(t: Transcript) -> int:
@@ -108,10 +108,12 @@ def spoken_words(t: Transcript) -> int:
 
 def thin_reason(ctx: RunContext, t: Transcript) -> str | None:
     """Why this answer is too thin to be the whole of the video, or None. The length is the larger of the
-    site's stated duration and the track's own last line, and it must be at least a minute."""
+    stated duration (the site's metadata, else the player's own) and the track's last line, and it must be
+    at least a minute."""
     last = max((ln.start + ln.dur for ln in t.lines), default=0.0)
+    stated = (ctx.info or {}).get("duration") or ((t.notes or {}).get("page_meta") or {}).get("duration") or 0
     try:
-        seconds = max(float((ctx.info or {}).get("duration") or 0), last)
+        seconds = max(float(stated), last)
     except (TypeError, ValueError):
         seconds = last
     if seconds < THIN_MIN_SECONDS:
@@ -124,9 +126,10 @@ def thin_reason(ctx: RunContext, t: Transcript) -> str | None:
 
 def take_doors(ctx: RunContext, order: list[str], doors: dict[str, Callable[[RunContext], Transcript]] | None = None,
                probe: Callable[[RunContext], Any] | None = None) -> tuple[Transcript | None, list[dict[str, Any]]]:
-    """Take the doors in order until one answers. A caption answer too thin for the video's length (a
-    music-only track, a placeholder) does not end the run: the next doors are tried, and the answer with
-    the most spoken words wins; a thin answer kept says so in its notes."""
+    """Take the doors in order until one answers. An answer too thin for the video's length (a music-only
+    caption track, a placeholder) does not end the run: it is kept in reserve while the next doors are
+    tried, and the answer with the most spoken words wins; a thin answer kept says so in its notes. The
+    metadata is read before the first answer is judged, so a short track is measured against the video."""
     doors = doors or DOORS
     probe = probe or _probe
     attempts: list[dict[str, Any]] = []
@@ -158,7 +161,10 @@ def take_doors(ctx: RunContext, order: list[str], doors: dict[str, Callable[[Run
         took = round(time.monotonic() - t0, 2)
         attempt = {"door": name, "ok": True, "kind": "ok", "error": "", "seconds": took, "words": result.words}
         attempts.append(attempt)
-        why = thin_reason(ctx, result) if name in CAPTION_DOORS else None
+        if not probed:  # the video's own length, before this answer is judged against it
+            probed = True
+            attempts.append(_probe_attempt(ctx, probe))
+        why = thin_reason(ctx, result)
         if why and i + 1 < len(order):
             attempt.update(ok=False, kind="Thin", error=f"{why}; kept in reserve, trying the next door")
             ctx.log(f"{name}: {why}; next door: {order[i + 1]}")
@@ -166,14 +172,17 @@ def take_doors(ctx: RunContext, order: list[str], doors: dict[str, Callable[[Run
                 thin = (result, attempt, why)
             continue
         if thin is not None and spoken_words(thin[0]) > spoken_words(result):
-            break  # the later answer heard less than the thin one: keep the thin one
+            attempt.update(ok=False, kind="Fewer words",
+                           error=f"heard {spoken_words(result)} spoken word(s), fewer than the answer kept in reserve")
+            ctx.log(f"{name}: heard fewer words than the answer kept in reserve; next door: {nxt}")
+            continue
         if why:
             result.notes["thin_transcript"] = f"{why}; no later door to try"
         ctx.log(f"{name}: {result.words:,} words in {took:.1f} s")
         return result, attempts
     if thin is not None:
         result, attempt, why = thin
-        attempt["kept"] = True
+        attempt.update(ok=True, kind="ok", kept=True, error=f"{why}; kept: no later door heard more")
         result.notes["thin_transcript"] = f"{why}; no later door heard more"
         ctx.log(f"{result.door}: kept the thin answer ({why}); no later door heard more")
         return result, attempts
