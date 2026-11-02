@@ -11,7 +11,9 @@ The files in this folder are made from a third-party video, not from this projec
 Changes made: the video's English caption track was read as published and reformatted into timed
 lines (`transcript.md`, `transcript.json`); `chapters.json` holds the video's own chapters;
 `digest.json`, `digest.md` and `digest.html` are a summary written from the transcript, with short
-quotes checked against it (`quote_check.json`). No video, audio or image from the video is included.
+quotes checked against it (`quote_check.json`); `transcript.html` is the caption text laid out by
+chapter in timed paragraphs. The pages were regenerated with video-digest 0.2.0 from the same
+`digest.json` and transcript. No video, audio or image from the video is included.
 
 The video's words belong to their author under the license above; this project's MIT license covers
 its code, not these words.

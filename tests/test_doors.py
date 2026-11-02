@@ -346,8 +346,10 @@ def test_audio_pick_keeps_a_format_whose_codecs_are_unknown_and_ranks_it_last():
 def test_speech_door_checks_its_parts_before_downloading(make_ctx):
     fetched = []
     with pytest.raises(DoorUnavailable, match="faster-whisper"):
+        # the loader must not run either: on a machine without faster-whisper its own import error would
+        # match too, and the test would pass with the parts check gone
         speech.run(make_ctx(YT), check=lambda: ["faster-whisper (pip install 'video-digest[speech]')"],
-                   fetch_audio=lambda c: fetched.append(1))
+                   fetch_audio=lambda c: fetched.append(1), loader=lambda c: pytest.fail("loaded the model"))
     assert fetched == []
     assert speech.missing_parts(find_spec=lambda m: None, which=lambda n: None) == [
         "faster-whisper (pip install 'video-digest[speech]')", "numpy (pip install 'video-digest[speech]')",

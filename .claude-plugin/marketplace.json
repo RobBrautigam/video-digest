@@ -1,0 +1,21 @@
+{
+  "name": "video-digest",
+  "metadata": {
+    "description": "A Claude Code skill that turns a video into a timed transcript and a quote-checked digest."
+  },
+  "owner": {
+    "name": "video-digest contributors"
+  },
+  "plugins": [
+    {
+      "name": "video-digest",
+      "description": "Digest a video: timed transcript from free caption doors first, then a chaptered digest whose every quote is checked by script.",
+      "author": {
+        "name": "video-digest contributors"
+      },
+      "source": "./",
+      "category": "productivity",
+      "homepage": "https://github.com/RobBrautigam/video-digest"
+    }
+  ]
+}

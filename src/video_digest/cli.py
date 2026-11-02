@@ -2,7 +2,8 @@
 
     video-digest <url or file> [options]        the transcript folder (alias: video-digest run ...)
     video-digest digest <folder> --init         digest.json to fill, plus reading.md
-    video-digest digest <folder>                check every quote, then write digest.md and digest.html
+    video-digest digest <folder>                check every quote, then write digest.md, digest.html, transcript.html
+    video-digest page <folder>                  write transcript.html again (the whole text by chapter)
 """
 
 from __future__ import annotations
@@ -46,7 +47,7 @@ def _digest_parser() -> argparse.ArgumentParser:
     p.add_argument("--check-only", action="store_true", help="check, write nothing")
     p.add_argument("--draft", action="store_true", help="write the pages even with problems, misses marked")
     p.add_argument("--snap", action="store_true",
-                   help="rewrite each point's time in digest.json to the second its quote starts")
+                   help="rewrite each quoted entry's time in digest.json to the second its quote starts")
     p.add_argument("--window", type=float, default=digest.DEFAULT_WINDOW,
                    help="seconds either side of a quote's time to search (default 75)")
     return p
@@ -63,7 +64,7 @@ def cmd_digest(argv: list[str]) -> int:
     result = digest.check(folder, a.window)
     if a.snap:
         moved = digest.snap_times(folder, result)
-        print(f"snapped {moved} point time(s) to where their quotes start")
+        print(f"snapped {moved} quoted time(s) (points, section rows, actions) to where their quotes start")
         result = digest.check(folder, a.window)
     matched = sum(1 for q in result.quotes if q["found_at"])
     print(f"quotes: {matched} of {len(result.quotes)} found within {a.window:.0f} s")
@@ -76,13 +77,30 @@ def cmd_digest(argv: list[str]) -> int:
         return 1
     d = json.loads((folder / "digest.json").read_text(encoding="utf-8"))
     meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+    lines = json.loads((folder / "transcript.json").read_text(encoding="utf-8")).get("lines") or []
     (folder / "quote_check.json").write_text(json.dumps({"window": a.window, "problems": result.problems,
                                                          "quotes": result.quotes}, indent=2, ensure_ascii=False)
                                              + "\n", encoding="utf-8", newline="\n")
-    (folder / "digest.md").write_text(digest.render_markdown(d, meta, result), encoding="utf-8", newline="\n")
-    (folder / "digest.html").write_text(html_page.render_html(d, meta, result), encoding="utf-8", newline="\n")
-    print(f"wrote {folder / 'digest.md'} and {folder / 'digest.html'}")
+    (folder / "digest.md").write_text(digest.render_markdown(d, meta, result, lines), encoding="utf-8", newline="\n")
+    (folder / "digest.html").write_text(html_page.render_html(d, meta, result, lines, "transcript.html"),
+                                        encoding="utf-8", newline="\n")
+    html_page.write_transcript_page(folder)  # the digest's chapters, and a link back to the digest
+    print(f"wrote {folder / 'digest.md'}, {folder / 'digest.html'} and {folder / 'transcript.html'}")
     return 0 if result.ok else 1
+
+
+def cmd_page(argv: list[str]) -> int:
+    p = argparse.ArgumentParser(prog="video-digest page",
+                                description="Write transcript.html (the whole text by chapter) from an output folder.")
+    p.add_argument("folder", help="an output folder from `video-digest <source>`")
+    a = p.parse_args(argv)
+    folder = Path(a.folder)
+    if not (folder / "transcript.json").exists() or not (folder / "meta.json").exists():
+        print(f"video-digest: {folder} has no transcript.json and meta.json (run `video-digest <source>` first)",
+              file=sys.stderr)
+        return 2
+    print(f"wrote {html_page.write_transcript_page(folder)}")
+    return 0
 
 
 def cmd_run(argv: list[str]) -> int:
@@ -108,6 +126,8 @@ def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv and argv[0] == "digest":
         return cmd_digest(argv[1:])
+    if argv and argv[0] == "page":
+        return cmd_page(argv[1:])
     if argv and argv[0] == "run":
         argv = argv[1:]
     return cmd_run(argv)

@@ -1,24 +1,84 @@
 # video-digest
 
 Turn a video into a timed transcript, then into a chaptered digest whose every quote has been checked
-against the transcript by script.
+against the transcript by script. Free caption doors first, speech to text on your own machine when
+there are none, and no language model inside the tool: you (or an agent such as Claude Code) write the
+digest, and the tool proves each quote is really in the video at the time you say.
 
 - **Sources:** YouTube, Vimeo, Wistia, any of the [sites yt-dlp supports](https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md), and local audio or video files.
 - **Free doors first:** the site's own captions before anything else, speech to text on your machine
   when there are none, and a paid service only if you switch it on with your own key.
 - **Output per video:** `transcript.md` (timed lines under their chapters), `transcript.json`,
-  `chapters.json`, `meta.json` (every door tried, why it failed, how long it took), and scene stills
-  by chapter when you ask for them or the video looks like a screen demo.
-- **The digest:** chapters with times and speakers, every method or claim with its time and exact
-  quote, an optional "actions for you" section, as Markdown and a self-contained HTML page. You (or
-  an agent such as Claude Code, through the bundled skill) write it; the tool checks it.
+  `transcript.html` (the whole text by chapter, for a person to read), `chapters.json`, `meta.json`
+  (every door tried, why it failed, how long it took), and scene stills by chapter when you ask for
+  them or the video looks like a screen demo.
+- **The digest:** chapters with times, lengths and speakers, every method or claim with its time and
+  exact quote, optional extra sections, an optional "actions for you" section, and a note on how the
+  page was made, as Markdown and a self-contained HTML page. You (or an agent, through the bundled
+  Claude Code skill) write it; the tool checks it.
 
 ```
 video-digest https://www.youtube.com/watch?v=6SDVw1PYYcw
 digests/youtube-6SDVw1PYYcw: 668 words from youtube-transcript-api (en-US (manual)), 5 chapters, 0 stills, 7.41 s
 ```
 
-See [`examples/youtube-nasa-podium-test/`](examples/youtube-nasa-podium-test/) for a full run and its digest.
+![The digest page made from the committed example: summary, then a chapter table with start, length, words, speakers and summary](docs/digest-page.png)
+
+See [`examples/youtube-nasa-podium-test/`](examples/youtube-nasa-podium-test/) for a full run: the
+transcript files, the filled `digest.json`, the quote check and all three pages.
+
+## What's new in 0.2.0
+
+- **A transcript page for people.** Every run writes `transcript.html`: the whole text under its
+  chapters, cut into paragraphs of 30 to 45 seconds (a paragraph ends at the first sentence end after
+  30 seconds, or at 45), each paragraph's time a link into the video, each chapter a fold, long
+  chapters split into several folds. `video-digest page <folder>` writes it again on its own.
+- **More of the digest is checked.** Quotes in the "actions for you" section and in new optional
+  `sections[]` (any extra section you want, such as "what we could borrow") are checked against the
+  transcript like the main points, and `--snap` moves them too. A placeholder time such as `1:00:1x`
+  is refused anywhere in the digest, your own summaries and titles included.
+- **Quote links no longer open late on automatic captions.** Automatic caption lines overlap the next
+  line on screen; the word clock now spreads each line's words over the time until the next line
+  starts, so a quote's time is the second it was said.
+- **The digest page says how it was made:** each chapter's length and word count, the doors tried,
+  the quote count, the longest stretch with no words on the track, and the versions that made it.
+- **A near-empty caption track no longer ends the run.** A track with almost no words for the video's
+  length (a music-only track, a placeholder) is kept in reserve while the next doors try; the answer
+  with the most spoken words wins, and a thin answer that is kept says so in `meta.json`.
+- **Install the skill as a Claude Code plugin** in two commands (below).
+
+The full list is in [CHANGELOG.md](CHANGELOG.md).
+
+## Quick start
+
+From a clean clone, with no network after the install: check the committed example's quotes, then
+write its three pages into a copy of it.
+
+```
+git clone https://github.com/RobBrautigam/video-digest
+cd video-digest
+python -m venv .venv
+# macOS or Linux: source .venv/bin/activate    Windows: .venv\Scripts\activate
+pip install .
+video-digest --version
+
+video-digest digest examples/youtube-nasa-podium-test --check-only
+# quotes: 12 of 12 found within 75 s
+
+python -c "import shutil; shutil.copytree('examples/youtube-nasa-podium-test', 'digests/try-it')"
+video-digest digest digests/try-it
+# wrote digests/try-it/digest.md, digests/try-it/digest.html and digests/try-it/transcript.html
+```
+
+Open `digests/try-it/digest.html` in a browser. Then a real video (this one needs the network):
+
+```
+video-digest "https://www.youtube.com/watch?v=6SDVw1PYYcw"
+video-digest digest digests/youtube-6SDVw1PYYcw --init
+```
+
+`--init` writes `digest.json` for you to fill and `reading.md` to read from; the full method is in
+[the digest step](#the-digest-step).
 
 ## Install
 
@@ -40,6 +100,18 @@ or from a clone: `pip install ".[speech]"`. Python 3.10 or newer.
   accurate and much bigger; pick one with `VIDEO_DIGEST_WHISPER_MODEL`.
 - `[speech]` is optional: without it, everything works except the speech door.
 
+### Missing tools?
+
+Captions and the digest step need neither tool. Speech to text and stills need ffmpeg; YouTube media
+downloads also need a JavaScript runtime.
+
+| Tool | macOS | Debian or Ubuntu | Windows |
+|---|---|---|---|
+| ffmpeg | `brew install ffmpeg` | `sudo apt install ffmpeg` | `winget install Gyan.FFmpeg` |
+| deno (or Node.js) | `brew install deno` | `curl -fsSL https://deno.land/install.sh \| sh` | `winget install DenoLand.Deno` |
+
+Open a new terminal after installing so the PATH change is seen.
+
 | Environment variable | What it does |
 |---|---|
 | `VIDEO_DIGEST_WHISPER_MODEL` | Model name (`base.en`, `small`, ...) or a local model folder |
@@ -49,6 +121,20 @@ or from a clone: `pip install ".[speech]"`. Python 3.10 or newer.
 | `VIDEO_DIGEST_SUPADATA_MODE` | `native` (default, existing captions only), `auto` or `generate` |
 
 ## The doors, in order, and why
+
+```mermaid
+flowchart TD
+    S["a link or a local file"] --> Y["caption library (YouTube)"]
+    Y -->|"no track, refused or thin"| D["yt-dlp subtitles"]
+    D -->|"none"| P["the player's caption file (Vimeo, Wistia)"]
+    P -->|"none"| W["speech to text on your machine"]
+    W -->|"failed"| X["paid door, off unless --allow-paid"]
+    Y & D & P & W & X -->|"timed lines"| T["transcript.md, .json, .html and meta.json"]
+    T --> G["you or an agent fill digest.json"]
+    G --> C{"video-digest digest: every quote checked"}
+    C -->|"a miss: fix it from the transcript"| G
+    C -->|"all found"| H["digest.md and digest.html"]
+```
 
 Each door either returns timed lines or says why not, and the run moves to the next. A refusal (HTTP
 429 or a bot check) is never retried in the same run, and requests to one site are spaced by
@@ -81,6 +167,12 @@ Each door either returns timed lines or says why not, and the run moves to the n
    `--allow-paid` and your own `SUPADATA_API_KEY`, and asks for existing captions only unless you set
    `VIDEO_DIGEST_SUPADATA_MODE`.
 
+**A thin caption track keeps the run going.** On a video of a minute or more, a caption answer with
+fewer than 5 spoken words a minute (sound tags such as `[Music]` and `(applause)` do not count) is
+kept in reserve and the next door runs. The answer with the most spoken words wins; a thin answer that
+is kept carries `transcript_notes.thin_transcript` in `meta.json`, and the attempt shows `"kind":
+"Thin"`.
+
 `--doors` restricts or reorders them (`--doors speech` forces speech to text), and `--lang` asks for
 a language instead of the spoken one.
 
@@ -108,9 +200,9 @@ source and its id.
 
 ### The proof: four public sources, run end to end
 
-Run on 2026-10-05 from a home connection on a Windows desktop processor, no cookies, no signed-in
-browser, no paid call. "Door time" is the winning door alone; "wall" is the whole run, metadata and
-writing included.
+Run with version 0.1.0 on 2026-10-05 from a home connection on a Windows desktop processor, no
+cookies, no signed-in browser, no paid call (0.2.0 changed no door; it added the thin-track rule
+above). "Door time" is the winning door alone; "wall" is the whole run, metadata and writing included.
 
 | Source | Length | Door used | Words | Timed lines | Chapters | Door time | Wall |
 |---|---|---|---|---|---|---|---|
@@ -144,26 +236,53 @@ agreement, not accuracy.
 
 ```
 video-digest digest digests/youtube-6SDVw1PYYcw --init     # writes digest.json (to fill) and reading.md
-# fill digest.json: summary, chapters, points (time, kind, text, quote, speaker), optional actions
+# fill digest.json: summary, chapters, points, optional sections and actions
 video-digest digest digests/youtube-6SDVw1PYYcw --check-only
-video-digest digest digests/youtube-6SDVw1PYYcw --snap     # each point moves to where its quote starts
+video-digest digest digests/youtube-6SDVw1PYYcw --snap     # each quoted entry moves to where its quote starts
 ```
 
-The last command writes `digest.md`, `digest.html` and `quote_check.json`, and refuses while any
-problem remains (`--draft` writes the pages with the misses marked). A problem is:
+The last command writes `digest.md`, `digest.html`, `transcript.html` and `quote_check.json`, and
+refuses while any problem remains (`--draft` writes the pages with the misses marked). `reading.md`
+is the transcript in paragraphs, each with its time stamp, for reading start to end.
 
-- a quote not found in the transcript, in order, within 75 seconds of its time (`--window` to change);
-- a time that is not a real `H:MM:SS` (a placeholder such as `1:00:1x` is refused, in a field or in
-  text);
-- chapters out of order or past the end of the video.
+What goes in `digest.json` (the example's [`digest.json`](examples/youtube-nasa-podium-test/digest.json) is a filled one):
 
-The HTML page is one file with no scripts and nothing loaded from elsewhere, readable in light and
-dark mode, with a section list beside the text on wide screens and links that open the video at each
-time on YouTube and Vimeo.
+```json
+{
+  "summary": "Three to five sentences: what the video teaches or argues.",
+  "chapters": [{"start": "0:00:00", "title": "...", "speakers": ["..."], "summary": "..."}],
+  "points": [{"time": "0:00:06", "kind": "method", "text": "Your words.",
+              "quote": "We call this the podium test", "speaker": "NASA scientist"}],
+  "sections": [{"title": "What we could borrow", "intro": "Optional, one line.",
+                "rows": [{"time": "0:01:46", "text": "Your words.",
+                          "quote": "Are we sure we're seeing what we think we're seeing", "speaker": "..."}]}],
+  "actions": [{"time": "0:01:42", "text": "A concrete step for the reader.", "quote": "optional, checked when present"}]
+}
+```
+
+`kind` is one of method, claim, number, tool, example, warning or quote. A problem is:
+
+- a quote (in a point, a section row or an action) not found in the transcript, in order, within 75
+  seconds of its time (`--window` to change);
+- a time that is not a real `H:MM:SS`, or past the end of the video; a placeholder such as `1:00:1x`
+  is refused in a time field and anywhere in the digest's text;
+- an action with a quote but no time, a point or section row with no text, a section with no title;
+- chapters out of order.
+
+The HTML pages are single files with no scripts and nothing loaded from elsewhere, readable in light
+and dark mode, with a section list beside the text on wide screens and links that open the video at
+each time on YouTube and Vimeo. The digest page links the transcript page and the transcript page
+links back. The digest page ends with how it was made: the doors tried, the quote count, the longest
+stretch with no words, and the version of the tool. The transcript page opens with the door, the
+track, whether its captions were automatic, and the longest stretch with no words; each chapter's
+fold opens on a click.
+
+![The transcript page from the committed example: chapters with their length and word count, and the text in timed paragraphs](docs/transcript-page.png)
 
 The script checks words and times. It cannot see a quote given to the wrong speaker or bent out of
-its context, so the skill's method has a person (or a fresh agent) read the sentence on each side of
-every quote that names who said it or what it means.
+its context, nor a wrong sentence of your own that quotes nothing, so the skill's method has a person
+(or a fresh agent) read the sentence on each side of every quote that names who said it or what it
+means, and read the digest's own words against the transcript.
 
 ## Claude Code skill
 
@@ -171,10 +290,34 @@ every quote that names who said it or what it means.
 digest, script check, context read, pages.
 
 1. Install the package (above).
-2. Copy the folder: `skills/video-digest` to `~/.claude/skills/video-digest` (all projects) or to
+2. Install the skill as a plugin, in Claude Code:
+
+   ```
+   /plugin marketplace add RobBrautigam/video-digest
+   /plugin install video-digest@video-digest
+   ```
+
+   Or copy the folder: `skills/video-digest` to `~/.claude/skills/video-digest` (all projects) or to
    `<project>/.claude/skills/video-digest` (one project).
 3. In Claude Code: "digest this video: <url>", optionally with what you want from it; the "actions for
    you" section is filled only from what you tell it.
+
+The plugin carries the skill only; the `video-digest` command comes from the package install in step 1.
+
+## Troubleshooting
+
+| What you see | What it means and what to do |
+|---|---|
+| `answered 429`, `Sign in to confirm`, or "the site is limiting requests from this address" | YouTube (or another site) is refusing your address. The run moves to the next door; wait before trying again, run from a home or office network, and never loop the tool over a channel or playlist. |
+| `the site refused the download (HTTP 403)` | On YouTube, yt-dlp could not solve the site's challenge: install deno or Node.js (see [Missing tools?](#missing-tools)). |
+| `ffmpeg is not on PATH` | Install ffmpeg; captions and the digest step still work without it. |
+| `install the speech door: pip install 'video-digest[speech]'` | No caption door answered and the speech extra is not installed. |
+| `this address is a playlist, not one video` | Pass one video's own URL. |
+| `transcript_notes.language_guessed` in `meta.json` | The player did not say which track is spoken; rerun with `--lang <code>` if the guess is wrong. |
+| `transcript_notes.thin_transcript` in `meta.json` | The best answer had almost no words for the video's length (often a music track); no door heard more. |
+| `nothing written: fix the problems above` | A quote or time failed the check. Search `transcript.md` for the exact words, fix `digest.json`, run `--check-only` again; `--draft` writes the pages with the misses marked. |
+
+`meta.json`'s `attempts` lists every door tried, why each failed and how long it took.
 
 ## Limits
 
@@ -183,11 +326,13 @@ digest, script check, context read, pages.
   address that asks too often. Run from a home or office network, keep the default pacing, and do not
   loop the tool over channels or playlists. A refusal names the next door in its message.
 - **Caption quality.** Automatic captions mishear names, numbers and jargon; manual captions are only
-  as good as whoever wrote them; translated tracks are refused on purpose.
+  as good as whoever wrote them; translated tracks are refused on purpose. Quote a name the way the
+  track spells it, or the check will not find it.
 - **Speech to text** on a processor ran here at 6.5 times real time on 3.5 minutes of YouTube audio
   (download and model load included) and 12.5 times on a 72-second local clip, with the base models;
-  longer files spread the model load further, and larger models are slower and more accurate. It
-  needs the audio, so on YouTube it needs a working media download (see the JavaScript runtime note).
+  longer files spread the model load further, and larger models are slower and more accurate. Plan on
+  the slower figure for a long video. It needs the audio, so on YouTube it needs a working media
+  download (see the JavaScript runtime note).
 - **Stills** come from ffmpeg's scene filter at 360p (threshold 0.30, at least 2 seconds apart,
   capped by `--max-stills`, one per chapter at least). Transitions produce stills too.
 - **Login-only, private or paywalled videos** are out of scope: the tool never uses cookies or a
@@ -201,6 +346,9 @@ pytest                              # no test touches the network
 python scripts/mutation_check.py    # breaks each door and guard on purpose; each must turn its test red
 ```
 
+Every guard has a mutation in `scripts/mutation_check.py`; a new guard adds one, and the script exits 1
+if any test still passes with its code broken.
+
 ## Credits
 
 | Project | License | Used for |
@@ -211,8 +359,8 @@ python scripts/mutation_check.py    # breaks each door and guard on purpose; eac
 | [faster-whisper](https://github.com/SYSTRAN/faster-whisper) | MIT | Optional dependency (`[speech]`): the speech door. |
 | [Whisper](https://github.com/openai/whisper) models, converted by SYSTRAN ([base.en](https://huggingface.co/Systran/faster-whisper-base.en), [base](https://huggingface.co/Systran/faster-whisper-base)) | MIT | The speech models faster-whisper downloads on first use; not bundled. |
 | [NumPy](https://github.com/numpy/numpy) | BSD-3-Clause (bundled parts under other permissive licenses) | Optional dependency (`[speech]`): hands the decoded audio to the model. |
-| [claude-video](https://github.com/bradautomates/claude-video) | MIT | Design borrowed, no code: captions first, then frames and local speech to text, handed to the agent as a skill. |
-| [summarize](https://github.com/steipete/summarize) | MIT | Idea borrowed, no code: stills taken at scene cuts rather than at even intervals. |
+| [claude-video](https://github.com/bradautomates/claude-video) | MIT | Design borrowed, no code: captions first, then frames and local speech to text, handed to the agent as a skill; and, in 0.2.0, shipping the skill as a Claude Code plugin with its own marketplace file, and a "missing tools" table. |
+| [summarize](https://github.com/steipete/summarize) | MIT | Idea borrowed, no code: stills taken at scene cuts rather than at even intervals; and, in 0.2.0, a quick start that runs before anything else in the README. |
 | [youtube-transcript-mcp](https://github.com/ergut/youtube-transcript-mcp) | MIT | Studied, nothing used: a hosted server reads from a data-center address, which YouTube often refuses; a local command avoids that. |
 | [WhisperX](https://github.com/m-bain/whisperX) | BSD-2-Clause | Studied, not used: the alternative when you need word-level times and speaker labels. |
 | [PySceneDetect](https://github.com/Breakthrough/PySceneDetect) | BSD-3-Clause | Studied, not used: ffmpeg's scene filter is enough here. |
@@ -225,6 +373,7 @@ Example content:
 - The committed example is made from "What Would It Take To Say We Found Life? We Asked a NASA Expert"
   by NASA Science, under the "Creative Commons Attribution license (reuse allowed)" as YouTube lists
   it; its attribution and the changes made are in [the example's README](examples/youtube-nasa-podium-test/README.md).
+  The two screenshots in `docs/` are of the pages made from it.
 - The Vimeo and Wistia proof runs read public demo videos that are linked above, not copied: nothing
   from them is in this repository.
 - The local clip (not included) was cut from LibriVox recordings, which are in the public domain.
