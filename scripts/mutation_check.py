@@ -231,7 +231,7 @@ MUTATIONS: list[tuple[str, str, str, str, str]] = [
      "    if thin is not None:\n        result, attempt, why = thin", "    if False:\n        result, attempt, why = thin",
      f"{V02}::test_a_thin_track_is_kept_with_a_note_when_no_later_door_hears_more"),
     ("run: sound tags are not spoken words", "pipeline.py",
-     '_SOUND_TAG.sub(" ", ln.text)', "ln.text",
+     'SOUND_TAG.sub(" ", ln.text)', "ln.text",
      f"{V02}::test_a_thin_track_is_kept_with_a_note_when_no_later_door_hears_more"),
     ("run: a later answer that heard less does not replace the kept one", "pipeline.py",
      "        if thin is not None and spoken_words(thin[0]) > spoken_words(result):", "        if False:",

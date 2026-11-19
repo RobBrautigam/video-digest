@@ -167,13 +167,13 @@ def download(ctx: RunContext, format_id: str, stem: str, ydl_factory: Any = None
 
 # --- caption files from the probe -----------------------------------------------------------------
 
-_EXT_ORDER = ("json3", "vtt", "srt", "ttml", "srv3")
+_EXT_ORDER = ("json3", "vtt", "srt")  # the caption formats parse.py reads, best first
 
 
 def _best_entry(entries: list[dict[str, Any]]) -> dict[str, Any] | None:
     by_ext = {e.get("ext"): e for e in entries if e.get("url")}
     for ext in _EXT_ORDER:
-        if ext in by_ext and ext in ("json3", "vtt", "srt"):
+        if ext in by_ext:
             return by_ext[ext]
     return None
 

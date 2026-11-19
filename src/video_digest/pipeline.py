@@ -98,12 +98,11 @@ def _probe_attempt(ctx: RunContext, probe: Callable[[RunContext], Any]) -> dict[
 
 THIN_MIN_SECONDS = 60.0  # a track is judged thin only on a video at least this long
 THIN_WORDS_PER_MINUTE = 5.0  # speech runs at about 150 words a minute; under 5 is a music or placeholder track
-_SOUND_TAG = SOUND_TAG
 
 
 def spoken_words(t: Transcript) -> int:
     """Words that were spoken: sound tags such as [Music], (applause) and note signs do not count."""
-    return sum(len(_SOUND_TAG.sub(" ", ln.text).split()) for ln in t.lines)
+    return sum(len(SOUND_TAG.sub(" ", ln.text).split()) for ln in t.lines)
 
 
 def thin_reason(ctx: RunContext, t: Transcript) -> str | None:
