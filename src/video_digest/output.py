@@ -10,6 +10,10 @@ from video_digest.models import Chapter, Transcript
 from video_digest.parse import stamp
 
 
+def read_json(path: Path) -> Any:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def write_json(path: Path, data: Any) -> None:
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
 
