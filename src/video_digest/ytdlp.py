@@ -189,17 +189,17 @@ def pick_caption(info: dict[str, Any], lang: str | None, original: str | None
     manual = info.get("subtitles") or {}
     auto = info.get("automatic_captions") or {}
     orig_keys = [k for k in auto if k.endswith("-orig")]
-    spoken = (orig_keys[0][:-5] if orig_keys else None) or original or info.get("language")
+    spoken = (orig_keys[0].removesuffix("-orig") if orig_keys else None) or original or info.get("language")
     want = lang or spoken
 
     def find(tracks: dict[str, Any], match: str | None, auto_only_original: bool) -> tuple[str, dict] | None:
         items = list(tracks.items())
         if match:  # the exact tag first (en-US over en when en-US is asked); the sort keeps the site's order
-            items.sort(key=lambda kv: -lang_closeness(kv[0][:-5] if kv[0].endswith("-orig") else kv[0], match))
+            items.sort(key=lambda kv: -lang_closeness(kv[0].removesuffix("-orig"), match))
         for key, entries in items:
             if key == "live_chat":
                 continue
-            base = key[:-5] if key.endswith("-orig") else key
+            base = key.removesuffix("-orig")
             if match and not lang_matches(base, match):
                 continue
             if auto_only_original and orig_keys and not key.endswith("-orig"):

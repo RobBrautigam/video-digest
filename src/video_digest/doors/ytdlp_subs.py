@@ -40,7 +40,7 @@ def run(ctx: RunContext, fetch: Callable[[RunContext, str], bytes] | None = None
         raise DoorError(f"the {key} caption file did not parse ({e}); next door: speech") from e
     if not lines:
         raise NoCaptions(f"the {key} caption file was empty; next door: speech")
-    lang = key[:-5] if key.endswith("-orig") else key
+    lang = key.removesuffix("-orig")
     if generated:
         ctx.original_language = ctx.original_language or lang
     return Transcript(lines=lines, door=NAME, language=lang, generated=generated,
