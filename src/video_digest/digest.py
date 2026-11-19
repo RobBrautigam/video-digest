@@ -336,6 +336,8 @@ LABELS = {"method": "Methods", "claim": "Claims", "number": "Numbers", "tool": "
           "warning": "Warnings", "quote": "Quotes"}
 
 
+# The four chapter helpers below are shared with html_page: a change to one can change the chapter
+# lengths and word counts on digest.md, digest.html and transcript.html.
 def _video_end(meta: dict[str, Any], lines: list[dict[str, Any]] | None) -> float:
     """Where the video ends: its stated length, or the end of its last line when that is later."""
     last_word = max((float(ln["start"]) + float(ln.get("dur") or 0) for ln in lines or []), default=0.0)
