@@ -167,13 +167,13 @@ def download(ctx: RunContext, format_id: str, stem: str, ydl_factory: Any = None
 
 # --- caption files from the probe -----------------------------------------------------------------
 
-_EXT_ORDER = ("json3", "vtt", "srt", "ttml", "srv3")
+_EXT_ORDER = ("json3", "vtt", "srt")  # the caption formats parse.py reads, best first
 
 
 def _best_entry(entries: list[dict[str, Any]]) -> dict[str, Any] | None:
     by_ext = {e.get("ext"): e for e in entries if e.get("url")}
     for ext in _EXT_ORDER:
-        if ext in by_ext and ext in ("json3", "vtt", "srt"):
+        if ext in by_ext:
             return by_ext[ext]
     return None
 
@@ -189,17 +189,17 @@ def pick_caption(info: dict[str, Any], lang: str | None, original: str | None
     manual = info.get("subtitles") or {}
     auto = info.get("automatic_captions") or {}
     orig_keys = [k for k in auto if k.endswith("-orig")]
-    spoken = (orig_keys[0][:-5] if orig_keys else None) or original or info.get("language")
+    spoken = (orig_keys[0].removesuffix("-orig") if orig_keys else None) or original or info.get("language")
     want = lang or spoken
 
     def find(tracks: dict[str, Any], match: str | None, auto_only_original: bool) -> tuple[str, dict] | None:
         items = list(tracks.items())
         if match:  # the exact tag first (en-US over en when en-US is asked); the sort keeps the site's order
-            items.sort(key=lambda kv: -lang_closeness(kv[0][:-5] if kv[0].endswith("-orig") else kv[0], match))
+            items.sort(key=lambda kv: -lang_closeness(kv[0].removesuffix("-orig"), match))
         for key, entries in items:
             if key == "live_chat":
                 continue
-            base = key[:-5] if key.endswith("-orig") else key
+            base = key.removesuffix("-orig")
             if match and not lang_matches(base, match):
                 continue
             if auto_only_original and orig_keys and not key.endswith("-orig"):

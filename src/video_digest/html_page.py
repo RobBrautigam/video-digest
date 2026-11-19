@@ -8,8 +8,9 @@ from html import escape
 from pathlib import Path
 from typing import Any
 
-from video_digest.digest import (LABELS, CheckResult, _grouped, chapter_spans, how_made, longest_gap, paragraphs,
-                                 time_key, time_link)
+from video_digest.digest import (LABELS, CheckResult, _chapter_lines, _grouped, _span_cells, _video_end, _word_count,
+                                 chapter_spans, how_made, longest_gap, paragraphs, time_key, time_link)
+from video_digest.output import read_json
 from video_digest.parse import parse_stamp, stamp
 
 CSS = """
@@ -86,7 +87,6 @@ def render_html(d: dict[str, Any], meta: dict[str, Any], result: CheckResult,
     by_point = {q["point"]: q for q in result.quotes if "point" in q}
     by_action = {q["action"]: q for q in result.quotes if "action" in q}
     by_row = {(q["section"], q["row"]): q for q in result.quotes if "section" in q}
-    matched = sum(1 for q in result.quotes if q["found_at"])
     sections: list[tuple[str, str]] = []
     if d.get("summary"):
         sections.append(("summary", "Summary"))
@@ -104,7 +104,7 @@ def render_html(d: dict[str, Any], meta: dict[str, Any], result: CheckResult,
             f"<li>Length {escape(stamp(meta.get('duration') or 0))}; transcript from {escape(str(meta.get('door')))}"
             f" ({int(meta.get('words') or 0):,} words)"
             + (f'; <a href="{escape(transcript_page)}">the full transcript</a>' if transcript_page else "") + "</li>",
-            f"<li>Quotes checked against the transcript: {matched} of {len(result.quotes)} found</li>", "</ul>"]
+            f"<li>Quotes checked against the transcript: {result.found} of {len(result.quotes)} found</li>", "</ul>"]
     if d.get("summary"):
         body += ['<h2 id="summary">Summary</h2>', f"<p>{escape(d['summary'])}</p>"]
     counted = lines is not None
@@ -114,8 +114,7 @@ def render_html(d: dict[str, Any], meta: dict[str, Any], result: CheckResult,
     for ch, sp in zip(d.get("chapters") or [], chapter_spans(d, meta, lines)):
         cells = f"<td class=\"t\">{_t(ch.get('start', ''), meta)}</td>"
         if counted:
-            length = stamp(sp["end"] - sp["start"]) if sp["end"] is not None else ""
-            words = f"{sp['words']:,}" if sp["words"] is not None else ""
+            length, words = _span_cells(sp)
             cells += f'<td class="n">{escape(length)}</td><td class="n">{escape(words)}</td>'
         body.append(f"<tr>{cells}<td>{escape(str(ch.get('title') or ''))}</td>"
                     f"<td>{escape(', '.join(ch.get('speakers') or []))}</td>"
@@ -168,14 +167,14 @@ def _folds(paras: list[tuple[float, str]], words: int) -> list[list[tuple[float,
 def write_transcript_page(folder: Path) -> Path:
     """transcript.html from a run folder: the digest's chapters when digest.json has good ones, else the
     video's own (chapters.json); a link to digest.html when it exists."""
-    meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
-    tr = json.loads((folder / "transcript.json").read_text(encoding="utf-8"))
+    meta = read_json(folder / "meta.json")
+    tr = read_json(folder / "transcript.json")
     chapters: list[dict[str, Any]] = []
     if (folder / "chapters.json").exists():
-        chapters = json.loads((folder / "chapters.json").read_text(encoding="utf-8"))
+        chapters = read_json(folder / "chapters.json")
     if (folder / "digest.json").exists():
         try:
-            d = json.loads((folder / "digest.json").read_text(encoding="utf-8"))
+            d = read_json(folder / "digest.json")
             raw = d.get("chapters") or []
             mine = [{"start": parse_stamp(c["start"]), "title": str(c.get("title") or "").strip() or "Untitled"}
                     for c in raw]
@@ -198,12 +197,11 @@ def render_transcript_html(meta: dict[str, Any], chapters: list[dict[str, Any]],
     second of the video where the site has one."""
     chs = [{"start": float(c.get("start") or 0), "title": str(c.get("title") or "Untitled")} for c in chapters]
     chs.sort(key=lambda c: c["start"])
-    last_word = max((float(ln["start"]) + float(ln.get("dur") or 0) for ln in lines), default=0.0)
-    end_all = max(float(meta.get("duration") or 0), last_word)
+    end_all = _video_end(meta, lines)
     if not chs:
         chs = [{"start": 0.0, "title": "Transcript"}]
     title = str(meta.get("title") or meta.get("id") or "Transcript")
-    total = sum(len(str(ln["text"]).split()) for ln in lines)
+    total = _word_count(lines)
     if meta.get("door") == "speech":
         how = "speech to text"
     else:
@@ -222,8 +220,8 @@ def render_transcript_html(meta: dict[str, Any], chapters: list[dict[str, Any]],
     for i, c in enumerate(chs):
         a = 0.0 if i == 0 else c["start"]
         b = chs[i + 1]["start"] if i + 1 < len(chs) else end_all
-        mine = [ln for ln in lines if a <= float(ln["start"]) < b or (i + 1 == len(chs) and float(ln["start"]) >= b)]
-        words = sum(len(str(ln["text"]).split()) for ln in mine)
+        mine = _chapter_lines(lines, a, b, i + 1 == len(chs))
+        words = _word_count(mine)
         anchor = f"c-{i + 1}"
         nav.append((anchor, f"{stamp(c['start'])} {c['title']}"))
         body += [f'<h2 id="{anchor}">{escape(c["title"])}</h2>',

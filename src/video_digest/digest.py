@@ -7,13 +7,13 @@ transcript, in order, within a window of the time it is given at, before anyone 
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from video_digest import __version__
+from video_digest.output import read_json, write_json
 from video_digest.parse import parse_stamp, stamp
 
 DEFAULT_WINDOW = 75.0  # seconds either side of a quote's stated time
@@ -93,10 +93,6 @@ def find_quote(words: list[Word], quote: str, near: float | None, window: float 
     return None if best is None else best[1]
 
 
-def _load(folder: Path, name: str) -> Any:
-    return json.loads((folder / name).read_text(encoding="utf-8"))
-
-
 PARA_MIN, PARA_MAX = 30.0, 45.0  # seconds: a paragraph ends at a sentence end after 30 s, or at 45 s
 _CLOSERS = "\"')]”’"  # closing quotes and brackets after a sentence's last mark
 
@@ -140,9 +136,9 @@ def reading_file(lines: list[dict[str, Any]]) -> str:
 
 def init(folder: Path, force: bool = False) -> Path:
     """Write digest.json (chapters prefilled from chapters.json) and reading.md."""
-    meta = _load(folder, "meta.json")
-    tr = _load(folder, "transcript.json")
-    chapters = _load(folder, "chapters.json") if (folder / "chapters.json").exists() else []
+    meta = read_json(folder / "meta.json")
+    tr = read_json(folder / "transcript.json")
+    chapters = read_json(folder / "chapters.json") if (folder / "chapters.json").exists() else []
     target = folder / "digest.json"
     if target.exists() and not force:
         raise FileExistsError(f"{target} exists (pass --force to overwrite)")
@@ -157,7 +153,7 @@ def init(folder: Path, force: bool = False) -> Path:
         "sections": [],
         "actions": [],
     }
-    target.write_text(json.dumps(skeleton, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    write_json(target, skeleton)
     (folder / "reading.md").write_text(reading_file(tr["lines"]), encoding="utf-8", newline="\n")
     return target
 
@@ -171,6 +167,11 @@ class CheckResult:
     @property
     def ok(self) -> bool:
         return not self.problems
+
+    @property
+    def found(self) -> int:
+        """How many of the quotes were found in the transcript."""
+        return sum(1 for q in self.quotes if q["found_at"])
 
 
 def _time_tokens_ok(text: str) -> list[str]:
@@ -225,9 +226,9 @@ def quote_target(d: dict[str, Any], q: dict[str, Any]) -> dict[str, Any] | None:
 def check(folder: Path, window: float = DEFAULT_WINDOW) -> CheckResult:
     """Every quote (in points, actions and section rows) found in the transcript near its time, every
     time a real one inside the video, chapters in order, and no placeholder time in the prose."""
-    d = _load(folder, "digest.json")
-    tr = _load(folder, "transcript.json")
-    meta = _load(folder, "meta.json")
+    d = read_json(folder / "digest.json")
+    tr = read_json(folder / "transcript.json")
+    meta = read_json(folder / "meta.json")
     duration = float(meta.get("duration") or 0) or None
     words = word_index(tr["lines"])
     problems: list[str] = []
@@ -293,14 +294,14 @@ def snap_times(folder: Path, result: CheckResult) -> int:
     """Set each quoted entry's time (point, action, section row) to the second its quote was found at;
     returns how many moved."""
     path = folder / "digest.json"
-    d = json.loads(path.read_text(encoding="utf-8"))
+    d = read_json(path)
     moved = 0
     for q in result.quotes:
         entry = quote_target(d, q)
         if entry is not None and q["found_at"] and entry.get("time") != q["found_at"]:
             entry["time"] = q["found_at"]
             moved += 1
-    path.write_text(json.dumps(d, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
+    write_json(path, d)
     return moved
 
 
@@ -335,6 +336,30 @@ LABELS = {"method": "Methods", "claim": "Claims", "number": "Numbers", "tool": "
           "warning": "Warnings", "quote": "Quotes"}
 
 
+# The four chapter helpers below are shared with html_page: a change to one can change the chapter
+# lengths and word counts on digest.md, digest.html and transcript.html.
+def _video_end(meta: dict[str, Any], lines: list[dict[str, Any]] | None) -> float:
+    """Where the video ends: its stated length, or the end of its last line when that is later."""
+    last_word = max((float(ln["start"]) + float(ln.get("dur") or 0) for ln in lines or []), default=0.0)
+    return max(float(meta.get("duration") or 0), last_word)
+
+
+def _word_count(lines: list[dict[str, Any]]) -> int:
+    return sum(len(str(ln["text"]).split()) for ln in lines)
+
+
+def _chapter_lines(lines: list[dict[str, Any]], lo: float, hi: float, last: bool) -> list[dict[str, Any]]:
+    """The lines that start in [lo, hi); the last chapter also takes every line at or after hi."""
+    return [ln for ln in lines if lo <= float(ln["start"]) < hi or (last and float(ln["start"]) >= hi)]
+
+
+def _span_cells(sp: dict[str, Any]) -> tuple[str, str]:
+    """A chapter span's length and words as table text, blank where the span has none."""
+    length = stamp(sp["end"] - sp["start"]) if sp["end"] is not None else ""
+    words = f"{sp['words']:,}" if sp["words"] is not None else ""
+    return length, words
+
+
 def chapter_spans(d: dict[str, Any], meta: dict[str, Any], lines: list[dict[str, Any]] | None
                   ) -> list[dict[str, Any]]:
     """Each digest chapter's end, length and words counted on the transcript (None when no lines given).
@@ -347,8 +372,7 @@ def chapter_spans(d: dict[str, Any], meta: dict[str, Any], lines: list[dict[str,
             starts.append(float(parse_stamp(ch.get("start"))))
         except (ValueError, AttributeError, TypeError):
             starts.append(None)
-    last_word = max((float(ln["start"]) + float(ln.get("dur") or 0) for ln in lines or []), default=0.0)
-    end_all = max(float(meta.get("duration") or 0), last_word)
+    end_all = _video_end(meta, lines)
     first = next((i for i, s in enumerate(starts) if s is not None), None)
     out = []
     for i, a in enumerate(starts):
@@ -358,8 +382,7 @@ def chapter_spans(d: dict[str, Any], meta: dict[str, Any], lines: list[dict[str,
         span: dict[str, Any] = {"start": a, "end": b if a_ok else None, "words": None}
         if a_ok and lines is not None:
             lo = 0.0 if i == first else a
-            span["words"] = sum(len(str(ln["text"]).split()) for ln in lines
-                                if lo <= float(ln["start"]) < b or (nxt is None and float(ln["start"]) >= b))
+            span["words"] = _word_count(_chapter_lines(lines, lo, b, nxt is None))
         out.append(span)
     return out
 
@@ -385,11 +408,10 @@ def how_made(meta: dict[str, Any], result: CheckResult, lines: list[dict[str, An
     """Plain sentences on how the page was made: the doors, the check, the gaps in the words."""
     doors = "; ".join(f"{a['door']} {'answered' if a.get('ok') else 'did not (' + str(a.get('kind')) + ')'}"
                       for a in meta.get("attempts") or [] if a.get("door") != "probe")
-    matched = sum(1 for q in result.quotes if q["found_at"])
     out = [f"The words: {meta.get('door')}, {meta.get('track') or 'track not named'}, "
            f"{int(meta.get('words') or 0):,} words in {int(meta.get('lines') or 0):,} timed lines."
            + (f" Doors tried: {doors}." if doors else ""),
-           f"The quote check: {matched} of {len(result.quotes)} quotes found in the transcript within "
+           f"The quote check: {result.found} of {len(result.quotes)} quotes found in the transcript within "
            f"{result.window:.0f} seconds of their time, by script, before this page was written.",
            "What a script cannot check: a quote given to the wrong speaker or read out of its context; "
            "those are read by hand."]
@@ -427,8 +449,7 @@ def render_markdown(d: dict[str, Any], meta: dict[str, Any], result: CheckResult
     out.append(f"- Source: {d.get('source')}")
     out.append(f"- Length: {stamp(meta.get('duration') or 0)}; transcript from {meta.get('door')} "
                f"({meta.get('words', 0):,} words)")
-    matched = sum(1 for q in result.quotes if q["found_at"])
-    out.append(f"- Quotes checked against the transcript: {matched} of {len(result.quotes)} found")
+    out.append(f"- Quotes checked against the transcript: {result.found} of {len(result.quotes)} found")
     out.append("")
     if d.get("summary"):
         out += ["## Summary", "", d["summary"], ""]
@@ -442,9 +463,7 @@ def render_markdown(d: dict[str, Any], meta: dict[str, Any], result: CheckResult
         cells = [_md_cell(ch.get("start")), _md_cell(ch.get("title")), _md_cell(", ".join(ch.get("speakers") or [])),
                  _md_cell(ch.get("summary"))]
         if lines is not None:
-            length = stamp(sp["end"] - sp["start"]) if sp["end"] is not None else ""
-            words = f"{sp['words']:,}" if sp["words"] is not None else ""
-            cells[1:1] = [length, words]
+            cells[1:1] = _span_cells(sp)
         out.append("| " + " | ".join(cells) + " |")
     out.append("")
     for kind, pts in _grouped(d.get("points") or []):

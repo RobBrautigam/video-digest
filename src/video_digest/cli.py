@@ -9,11 +9,11 @@
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from pathlib import Path
 
 from video_digest import __version__, digest, html_page
+from video_digest.output import read_json, write_json
 from video_digest.pipeline import DOORS, AllDoorsFailed, Options, run
 
 
@@ -66,8 +66,7 @@ def cmd_digest(argv: list[str]) -> int:
         moved = digest.snap_times(folder, result)
         print(f"snapped {moved} quoted time(s) (points, section rows, actions) to where their quotes start")
         result = digest.check(folder, a.window)
-    matched = sum(1 for q in result.quotes if q["found_at"])
-    print(f"quotes: {matched} of {len(result.quotes)} found within {a.window:.0f} s")
+    print(f"quotes: {result.found} of {len(result.quotes)} found within {a.window:.0f} s")
     for prob in result.problems:
         print(f"  problem: {prob}")
     if a.check_only:
@@ -75,12 +74,10 @@ def cmd_digest(argv: list[str]) -> int:
     if not result.ok and not a.draft:
         print("nothing written: fix the problems above (or pass --draft to write the pages with misses marked)")
         return 1
-    d = json.loads((folder / "digest.json").read_text(encoding="utf-8"))
-    meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
-    lines = json.loads((folder / "transcript.json").read_text(encoding="utf-8")).get("lines") or []
-    (folder / "quote_check.json").write_text(json.dumps({"window": a.window, "problems": result.problems,
-                                                         "quotes": result.quotes}, indent=2, ensure_ascii=False)
-                                             + "\n", encoding="utf-8", newline="\n")
+    d = read_json(folder / "digest.json")
+    meta = read_json(folder / "meta.json")
+    lines = read_json(folder / "transcript.json").get("lines") or []
+    write_json(folder / "quote_check.json", {"window": a.window, "problems": result.problems, "quotes": result.quotes})
     (folder / "digest.md").write_text(digest.render_markdown(d, meta, result, lines), encoding="utf-8", newline="\n")
     (folder / "digest.html").write_text(html_page.render_html(d, meta, result, lines, "transcript.html"),
                                         encoding="utf-8", newline="\n")
@@ -110,13 +107,10 @@ def cmd_run(argv: list[str]) -> int:
                    pace=a.pace, allow_paid=a.allow_paid, keep_media=a.keep_media)
     try:
         folder = run(a.source, opts)
-    except AllDoorsFailed as e:
+    except (AllDoorsFailed, ValueError) as e:
         print(f"video-digest: {e}", file=sys.stderr)
         return 2
-    except ValueError as e:
-        print(f"video-digest: {e}", file=sys.stderr)
-        return 2
-    meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+    meta = read_json(folder / "meta.json")
     print(f"{folder}: {meta['words']:,} words from {meta['door']} ({meta.get('track')}), "
           f"{meta['chapters']} chapters, {meta['stills']['taken']} stills, {meta['wall_seconds']} s")
     return 0
