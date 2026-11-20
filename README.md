@@ -137,7 +137,7 @@ flowchart TD
     F -->|"timed lines"| T
     P -->|"none or thin"| W["speech to text on your machine"]
     Y -->|"no track"| W
-    W -->|"failed or thin"| X["paid door, off unless --allow-paid"]
+    W -->|"failed or thin (a link only)"| X["paid door, off unless --allow-paid"]
     Y & D & P & W & X -->|"timed lines"| T["transcript.md, .json, .html and meta.json"]
     T --> G["you or an agent fill digest.json"]
     G --> C{"video-digest digest: every quote checked"}

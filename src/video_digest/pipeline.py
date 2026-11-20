@@ -182,6 +182,7 @@ def take_doors(ctx: RunContext, order: list[str], doors: dict[str, Callable[[Run
             continue
         if why:
             result.notes["thin_transcript"] = f"{why}; no later door to try"
+            ctx.log(f"{name}: {why}; no later door to try")
         ctx.log(f"{name}: {result.words:,} words in {took:.1f} s")
         return result, attempts
     if thin is not None:
@@ -206,6 +207,8 @@ def run(ref: str, opts: Options) -> Path:
         ctx.log = opts.log
     order = door_order(source, opts.doors, opts.allow_paid)
     transcript, attempts = take_doors(ctx, order)
+    if transcript is None and not opts.doors and not opts.allow_paid and "paid" in ORDER[source.kind]:
+        attempts += take_doors(ctx, ["paid"])[1]  # left out while off: its own refusal says how to turn it on
     if not any(a["door"] == "probe" for a in attempts):
         # a door that needs no metadata won: one read for the title, length and chapters
         attempts.append(_probe_attempt(ctx, _probe))

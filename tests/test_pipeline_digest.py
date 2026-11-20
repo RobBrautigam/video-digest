@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import time
 
 import pytest
@@ -57,12 +58,33 @@ def test_with_the_paid_door_off_speech_is_the_last_door_for_a_url(tmp_path, monk
     for allow_paid, doors, note in ((False, ["youtube-api", "ytdlp-subs", "speech"], "; no later door to try"),
                                     (True, ["youtube-api", "ytdlp-subs", "speech", "paid"],
                                      "; no later door heard more")):
+        logs: list[str] = []
         folder = pipeline.run(YT, pipeline.Options(out=tmp_path / str(allow_paid), stills="never",
-                                                   allow_paid=allow_paid, log=lambda m: None, env={}))
+                                                   allow_paid=allow_paid, log=logs.append, env={}))
         meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
         assert [a["door"] for a in meta["attempts"] if a["door"] != "probe"] == doors, allow_paid
         assert meta["transcript_notes"]["thin_transcript"].endswith(note), allow_paid
+        assert any(m.endswith(note) for m in logs), (allow_paid, logs)  # the console says it is thin too
     assert paid_calls == [True]
+
+
+def test_with_every_free_door_failing_the_message_still_says_the_paid_door_is_off(tmp_path, monkeypatch):
+    from video_digest import pipeline
+
+    def no_track(ctx):
+        raise NoCaptions("no track")
+
+    def deaf(ctx):
+        raise DoorError("the speech model heard no words")
+
+    monkeypatch.setattr(pipeline, "_probe", lambda ctx: None)
+    monkeypatch.setitem(pipeline.DOORS, "youtube-api", no_track)
+    monkeypatch.setitem(pipeline.DOORS, "speech", deaf)
+    # the real paid door: while off it refuses before it reads a key or sends anything
+    for doors, named in ((None, True), (["speech"], False)):
+        with pytest.raises(AllDoorsFailed) as failed:
+            pipeline.run(YT, pipeline.Options(out=tmp_path, stills="never", doors=doors, log=lambda m: None, env={}))
+        assert ("- paid: the paid door is off (pass --allow-paid" in str(failed.value)) is named, doors
 
 
 def test_a_rate_limit_moves_to_the_next_door(make_ctx):
@@ -119,7 +141,7 @@ def test_every_door_failing_names_each_one_and_the_next_step(make_ctx):
     assert "youtube-api: blocked" in msg and "next: install the speech door" in msg
 
 
-def test_a_model_folder_named_after_faster_whisper_that_cannot_load_gets_no_install_hint(make_ctx):
+def test_a_model_folder_named_after_faster_whisper_that_cannot_load_gets_no_install_hint(make_ctx, monkeypatch):
     from video_digest.doors import speech
 
     def cannot_load(ctx):
@@ -139,6 +161,16 @@ def test_a_model_folder_named_after_faster_whisper_that_cannot_load_gets_no_inst
     missing = {"door": "speech", "ok": False, "kind": "DoorUnavailable",
                "error": "the speech door needs " + ", ".join(numpy_only)}
     assert "next: install the speech door" in str(AllDoorsFailed([missing]))  # part of the extra is missing
+
+    # the extra missing when the model loads (the parts check passed): the load's own message gets the hint
+    monkeypatch.setitem(sys.modules, "faster_whisper", None)
+    monkeypatch.setenv("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+
+    def no_extra(ctx):
+        return speech.run(ctx, check=lambda: [], fetch_audio=lambda c: pytest.fail("downloaded audio"))
+
+    _, attempts = take_doors(make_ctx(YT), ["speech"], doors={"speech": no_extra}, probe=lambda c: None)
+    assert "next: install the speech door" in str(AllDoorsFailed(attempts))
 
 
 def test_a_failed_probe_is_tried_once_and_the_player_supplies_the_title(tmp_path, monkeypatch):

@@ -72,7 +72,7 @@ fresh agent) reading speakers and context, which no script can check.
      the end of the video; a placeholder such as `1:00:1x` is refused in a time field and anywhere in
      the digest, your own prose included;
    - an action with a quote but no time, a point or section row with no text, a section with no title;
-   - a point whose `kind` is a word other than the seven;
+   - a point whose `kind` is set but is not one of the seven;
    - chapters out of order.
 
    Fix each from the transcript (search `transcript.md` for the exact words; a caption track hears a

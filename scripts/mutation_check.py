@@ -269,6 +269,21 @@ MUTATIONS: list[tuple[str, str, str, str, str]] = [
     ("run: --allow-paid reaches the door order", "pipeline.py",
      "    order = door_order(source, opts.doors, opts.allow_paid)", "    order = door_order(source, opts.doors)",
      f"{PIPE}::test_with_the_paid_door_off_speech_is_the_last_door_for_a_url"),
+    ("run: a thin answer from the last door is said on the console", "pipeline.py",
+     '            ctx.log(f"{name}: {why}; no later door to try")', "            pass",
+     f"{PIPE}::test_with_the_paid_door_off_speech_is_the_last_door_for_a_url"),
+    ("run: every free door failing still lists the paid door as off", "pipeline.py",
+     '    if transcript is None and not opts.doors and not opts.allow_paid and "paid" in ORDER[source.kind]:',
+     "    if False:",
+     f"{PIPE}::test_with_every_free_door_failing_the_message_still_says_the_paid_door_is_off"),
+    ("run: named doors leave the paid door out of the failure", "pipeline.py",
+     '    if transcript is None and not opts.doors and not opts.allow_paid and "paid" in ORDER[source.kind]:',
+     '    if transcript is None and not opts.allow_paid and "paid" in ORDER[source.kind]:',
+     f"{PIPE}::test_with_every_free_door_failing_the_message_still_says_the_paid_door_is_off"),
+    ("speech door: the model load names the install command", "doors/speech.py",
+     "        raise DoorUnavailable(\"faster-whisper is not installed (pip install 'video-digest[speech]')\") from e",
+     '        raise DoorUnavailable("faster-whisper is not installed") from e',
+     f"{PIPE}::test_a_model_folder_named_after_faster_whisper_that_cannot_load_gets_no_install_hint"),
 ]
 
 
