@@ -102,6 +102,6 @@ fresh agent) reading speakers and context, which no script can check.
 - YouTube refuses many cloud and data-center addresses; run from a home or office network.
 - Automatic captions mishear names, numbers and jargon; check the high-stakes words against the audio
   when they matter.
-- Speech to text on a processor is minutes, not seconds: measured at 6.5 to 12.5 times real time with
+- Speech to text on a processor is minutes, not seconds: measured at 6.5 to 13 times real time with
   the base models, download and model load included. For a long course, plan on the slower figure (a
   five-hour video is most of an hour).
