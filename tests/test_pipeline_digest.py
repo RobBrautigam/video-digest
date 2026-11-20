@@ -8,7 +8,7 @@ import pytest
 
 from video_digest import digest, html_page, stills
 from video_digest.context import RunContext
-from video_digest.models import Chapter, DoorError, Line, NoCaptions, RateLimited, Transcript
+from video_digest.models import Chapter, DoorError, DoorUnavailable, Line, NoCaptions, RateLimited, Transcript
 from video_digest.pipeline import AllDoorsFailed, door_order, take_doors
 from video_digest.sources import detect
 
@@ -171,6 +171,24 @@ def test_a_model_folder_named_after_faster_whisper_that_cannot_load_gets_no_inst
 
     _, attempts = take_doors(make_ctx(YT), ["speech"], doors={"speech": no_extra}, probe=lambda c: None)
     assert "next: install the speech door" in str(AllDoorsFailed(attempts))
+
+
+def test_one_install_command_in_both_speech_messages_and_the_hint(make_ctx, monkeypatch):
+    from video_digest import pipeline
+    from video_digest.doors import speech
+
+    assert speech.INSTALL == "pip install 'video-digest[speech]'"  # the command the README's troubleshooting names
+    assert pipeline.SPEECH_INSTALL is speech.INSTALL  # the hint reads the door's own string, not a copy
+    parts = speech.missing_parts(find_spec=lambda m: None, which=lambda n: "ffmpeg")
+    assert parts == [f"faster-whisper ({speech.INSTALL})", f"numpy ({speech.INSTALL})"]
+    monkeypatch.setitem(sys.modules, "faster_whisper", None)
+    monkeypatch.setenv("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
+    with pytest.raises(DoorUnavailable) as no_extra:
+        speech.load_model(make_ctx(YT))
+    assert str(no_extra.value) == f"faster-whisper is not installed ({speech.INSTALL})"
+    for error in ("the speech door needs " + ", ".join(parts), str(no_extra.value)):
+        attempt = {"door": "speech", "ok": False, "kind": "DoorUnavailable", "error": error}
+        assert f"next: install the speech door: {speech.INSTALL}" in str(AllDoorsFailed([attempt])), error
 
 
 def test_a_failed_probe_is_tried_once_and_the_player_supplies_the_title(tmp_path, monkeypatch):

@@ -27,8 +27,9 @@ DOORS: dict[str, Callable[[RunContext], Transcript]] = {
 }
 CAPTION_DOORS = {"youtube-api", "ytdlp-subs", "page", "sidecar"}
 NEEDS_PROBE = {"ytdlp-subs", "speech"}
-# The speech door names this command when its extra is missing; a model name or folder never holds it
-SPEECH_INSTALL = "pip install 'video-digest[speech]'"
+# The speech door names its own install command when its extra is missing (a model name or folder never
+# holds it); the hint reads that one string, so the door's messages and the hint cannot drift apart
+SPEECH_INSTALL = speech.INSTALL
 
 # Free first. The paid door is last and runs only when the user turned it on.
 ORDER: dict[str, list[str]] = {

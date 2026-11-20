@@ -14,6 +14,8 @@ from video_digest.context import RunContext
 from video_digest.models import DoorError, DoorUnavailable, Line, Transcript
 
 NAME = "faster-whisper"
+# The one install command for this door's extra: both messages below carry it, and the run's hint reads it
+INSTALL = "pip install 'video-digest[speech]'"
 
 MODEL_ENV = "VIDEO_DIGEST_WHISPER_MODEL"  # a model name (base.en, small) or a local model folder
 MODEL_DIR_ENV = "VIDEO_DIGEST_MODEL_DIR"  # where models are downloaded and cached
@@ -32,7 +34,7 @@ def model_name(ctx: RunContext) -> str:
 def missing_parts(find_spec: Callable[[str], Any] = importlib.util.find_spec,
                   which: Callable[[str], Any] = shutil.which) -> list[str]:
     """What the speech door needs and this machine lacks, checked before any audio is downloaded."""
-    missing = [f"{pkg} (pip install 'video-digest[speech]')"
+    missing = [f"{pkg} ({INSTALL})"
                for mod, pkg in (("faster_whisper", "faster-whisper"), ("numpy", "numpy")) if find_spec(mod) is None]
     if not which("ffmpeg"):
         missing.append("ffmpeg on PATH")
@@ -57,7 +59,7 @@ def load_model(ctx: RunContext) -> Any:
     try:
         from faster_whisper import WhisperModel
     except ImportError as e:
-        raise DoorUnavailable("faster-whisper is not installed (pip install 'video-digest[speech]')") from e
+        raise DoorUnavailable(f"faster-whisper is not installed ({INSTALL})") from e
     name = model_name(ctx)
     device = ctx.env.get(DEVICE_ENV, "cpu")
     kwargs: dict[str, Any] = {"device": device, "compute_type": "int8" if device == "cpu" else "float16"}

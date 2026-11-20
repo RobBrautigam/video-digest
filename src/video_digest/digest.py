@@ -223,6 +223,13 @@ def quote_target(d: dict[str, Any], q: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _no_kind(p: dict[str, Any]) -> bool:
+    """A point with no kind (missing, null or "") is a method. Any other value is set, a 0 or a [] included,
+    and must be one of KINDS."""
+    kind = p.get("kind")
+    return kind is None or kind == ""
+
+
 def check(folder: Path, window: float = DEFAULT_WINDOW) -> CheckResult:
     """Every quote (in points, actions and section rows) found in the transcript near its time, every
     time a real one inside the video, chapters in order, and no placeholder time in the prose."""
@@ -247,8 +254,17 @@ def check(folder: Path, window: float = DEFAULT_WINDOW) -> CheckResult:
             problems.append(f"{where}: {value} is past the end of the video ({stamp(duration)})")
         return t
 
+    def text_of(entry: dict[str, Any], key: str, where: str) -> str | None:
+        """A text field, stripped ("" when missing). A value that is not a string (a number, a list) is a
+        problem of its own and comes back as None, so the caller adds no second problem for it."""
+        value = entry.get(key)
+        if value is None or isinstance(value, str):
+            return (value or "").strip()
+        problems.append(f"{where}: {key} {value!r} is not a string (write it in double quotes)")
+        return None
+
     def quoted(entry: dict[str, Any], where: str, key: dict[str, int], t: float | None) -> None:
-        q = (entry.get("quote") or "").strip()
+        q = text_of(entry, "quote", where)
         if not q:
             return
         found = find_quote(words, q, t, window) if t is not None else None
@@ -266,23 +282,24 @@ def check(folder: Path, window: float = DEFAULT_WINDOW) -> CheckResult:
         last = t if t is not None else last
     for i, p in enumerate(d.get("points") or []):
         where = f"point {i + 1}"
-        if not (p.get("text") or "").strip():
+        if text_of(p, "text", where) == "":
             problems.append(f"{where}: empty text")
-        if p.get("kind") and p["kind"] not in KINDS:
+        if not _no_kind(p) and p["kind"] not in KINDS:
             problems.append(f"{where}: kind {p['kind']!r} is not one of {', '.join(KINDS)}")
         quoted(p, where, {"point": i + 1}, at(p.get("time"), where))
     for s, sec in enumerate(d.get("sections") or [], 1):
-        if not (sec.get("title") or "").strip():
+        if text_of(sec, "title", f"section {s}") == "":
             problems.append(f"section {s}: empty title")
         for r, row in enumerate(sec.get("rows") or [], 1):
             where = f"section {s} row {r}"
-            if not (row.get("text") or "").strip():
+            if text_of(row, "text", where) == "":
                 problems.append(f"{where}: empty text")
             quoted(row, where, {"section": s, "row": r}, at(row.get("time"), where))
     for i, a in enumerate(d.get("actions") or []):
         where = f"action {i + 1}"
         t = at(a["time"], where) if a.get("time") else None
-        if (a.get("quote") or "").strip() and not a.get("time"):
+        quote = a.get("quote")
+        if isinstance(quote, str) and quote.strip() and not a.get("time"):  # a non-string quote: quoted() says so
             problems.append(f"{where}: a quote needs the time it was said")
         else:
             quoted(a, where, {"action": i + 1}, t)
@@ -328,7 +345,7 @@ def _grouped(points: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any
     order = {k: i for i, k in enumerate(KINDS)}
     groups: dict[str, list[dict[str, Any]]] = {}
     for p in points:
-        kind = p.get("kind") or "method"
+        kind = "method" if _no_kind(p) else p["kind"]
         # a kind that is not a word (a list, a number) is a problem the check names; a --draft still shows it
         groups.setdefault(kind if isinstance(kind, str) else str(kind), []).append(p)
     return sorted(groups.items(), key=lambda kv: order.get(kv[0], 99))
