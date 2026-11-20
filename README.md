@@ -128,9 +128,10 @@ Open a new terminal after installing so the PATH change is seen.
 ```mermaid
 flowchart TD
     S["a link or a local file"] --> Y["caption library (YouTube)"]
-    Y -->|"no track, refused or thin"| D["yt-dlp subtitles"]
+    Y -->|"refused or thin"| D["yt-dlp subtitles"]
     D -->|"none or thin"| P["the player's caption file (Vimeo, Wistia)"]
     P -->|"none or thin"| W["speech to text on your machine"]
+    Y -->|"no track"| W
     W -->|"failed or thin"| X["paid door, off unless --allow-paid"]
     Y & D & P & W & X -->|"timed lines"| T["transcript.md, .json, .html and meta.json"]
     T --> G["you or an agent fill digest.json"]
@@ -174,9 +175,10 @@ Each door either returns timed lines or says why not, and the run moves to the n
 spoken words a minute (sound tags such as `[Music]` and `(applause)` do not count) is kept in reserve
 and the next door runs. The video's length comes from its metadata, read before the first answer is
 judged, so a few seconds of `[Music]` on a forty-minute video counts as thin. The answer with the most
-spoken words wins: in `meta.json`'s `attempts`, a door that answered thin shows `"kind": "Thin"`, a
-later one that heard less shows `"kind": "Fewer words"`, and a thin answer that is kept is marked
-`"kept": true` and carries `transcript_notes.thin_transcript`.
+spoken words wins: in `meta.json`'s `attempts`, a door whose thin answer was passed over shows
+`"kind": "Thin"`, a later one that heard less shows `"kind": "Fewer words"`; the thin answer that is
+used shows `"kind": "ok"`, with `"kept": true` when it waited in reserve, and carries
+`transcript_notes.thin_transcript`.
 
 `--doors` restricts or reorders them (`--doors speech` forces speech to text), and `--lang` asks for
 a language instead of the spoken one.
@@ -229,7 +231,7 @@ What the runs showed:
 - On Vimeo, yt-dlp's metadata read asked for a login; the player's own caption file returned the
   words, and the title came from the player.
 - The local clip was made with ffmpeg from three LibriVox recordings (public domain) and read at
-  about 12 times real time, model load included. The model misheard the author's name in the
+  about 13 times real time, model load included. The model misheard the author's name in the
   reader's introduction: names are where speech to text slips.
 - The speech run on YouTube first failed with HTTP 403 until yt-dlp had a JavaScript runtime; the
   tool now enables any it finds and says so in the error when none is found.
@@ -273,6 +275,7 @@ What goes in `digest.json` (the example's [`digest.json`](examples/youtube-nasa-
 - a time that is not a real `H:MM:SS`, or past the end of the video; a placeholder such as `1:00:1x`
   is refused in a time field and anywhere in the digest's text;
 - an action with a quote but no time, a point or section row with no text, a section with no title;
+- a point whose `kind` is a word other than the seven;
 - chapters out of order.
 
 The HTML pages are single files with no scripts and nothing loaded from elsewhere, readable in light
@@ -314,11 +317,11 @@ The plugin carries the skill only; the `video-digest` command comes from the pac
 
 | What you see | What it means and what to do |
 |---|---|
-| `answered 429`, `Sign in to confirm`, or "the site is limiting requests from this address" | YouTube (or another site) is refusing your address. The run moves to the next door; wait before trying again, run from a home or office network, and never loop the tool over a channel or playlist. |
+| `YouTube refused the caption request`, `answered 429`, `Sign in to confirm`, or "the site is limiting requests from this address" | YouTube (or another site) is refusing your address. The run moves to the next door; wait before trying again, run from a home or office network, and never loop the tool over a channel or playlist. |
 | `the site refused the download (HTTP 403)` | On YouTube, yt-dlp could not solve the site's challenge: install deno or Node.js (see [Missing tools?](#missing-tools)). |
-| `ffmpeg is not on PATH` | Install ffmpeg; captions and the digest step still work without it. |
+| `the speech door needs ... ffmpeg on PATH`, `ffmpeg is not on PATH` or `ffprobe is not on PATH` | Install ffmpeg; captions and the digest step still work without it. |
 | `install the speech door: pip install 'video-digest[speech]'` | No caption door answered and the speech extra is not installed. |
-| `this address is a playlist, not one video` | Pass one video's own URL. |
+| `this YouTube address is not one video` or `this address is a playlist, not one video` | Pass one video's own URL. |
 | `transcript_notes.language_guessed` in `meta.json` | The player did not say which track is spoken; rerun with `--lang <code>` if the guess is wrong. |
 | `transcript_notes.thin_transcript` in `meta.json` | The best answer had almost no words for the video's length (often a music track); no door heard more. |
 | `nothing written: fix the problems above` | A quote or time failed the check. Search `transcript.md` for the exact words, fix `digest.json`, run `--check-only` again; `--draft` writes the pages with the misses marked. |
@@ -335,7 +338,7 @@ The plugin carries the skill only; the `video-digest` command comes from the pac
   as good as whoever wrote them; translated tracks are refused on purpose. Quote a name the way the
   track spells it, or the check will not find it.
 - **Speech to text** on a processor ran here at 6.5 times real time on 3.5 minutes of YouTube audio
-  (download and model load included) and 12.5 times on a 72-second local clip, with the base models;
+  (download and model load included) and about 13 times on a 77-second local clip, with the base models;
   longer files spread the model load further, and larger models are slower and more accurate. Plan on
   the slower figure for a long video. It needs the audio, so on YouTube it needs a working media
   download (see the JavaScript runtime note).
