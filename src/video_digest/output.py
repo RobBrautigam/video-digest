@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from video_digest.doors.speech import NAME as SPEECH_DOOR
 from video_digest.models import Chapter, Transcript
 from video_digest.parse import stamp
 
@@ -21,9 +22,10 @@ def write_json(path: Path, data: Any) -> None:
 def transcript_markdown(t: Transcript, chapters: list[Chapter], title: str, source: str,
                         duration: float | None) -> str:
     gen = {True: "automatic", False: "manual", None: "unknown"}[t.generated]
+    how = "speech to text" if t.door == SPEECH_DOOR else f"captions {gen}"
     head = [f"# {title}", "",
             f"- Source: {source}",
-            f"- Door: {t.door} ({t.track or 'n/a'}), language {t.language or 'unknown'}, captions {gen}",
+            f"- Door: {t.door} ({t.track or 'n/a'}), language {t.language or 'unknown'}, {how}",
             f"- Length: {stamp(duration) if duration else 'unknown'}, {t.words:,} words, {len(t.lines):,} lines",
             ""]
     body: list[str] = []

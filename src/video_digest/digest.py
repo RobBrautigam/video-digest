@@ -328,7 +328,9 @@ def _grouped(points: list[dict[str, Any]]) -> list[tuple[str, list[dict[str, Any
     order = {k: i for i, k in enumerate(KINDS)}
     groups: dict[str, list[dict[str, Any]]] = {}
     for p in points:
-        groups.setdefault(p.get("kind") or "method", []).append(p)
+        kind = p.get("kind") or "method"
+        # a kind that is not a word (a list, a number) is a problem the check names; a --draft still shows it
+        groups.setdefault(kind if isinstance(kind, str) else str(kind), []).append(p)
     return sorted(groups.items(), key=lambda kv: order.get(kv[0], 99))
 
 

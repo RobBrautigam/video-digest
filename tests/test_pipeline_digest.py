@@ -19,11 +19,50 @@ def _t(door: str) -> Transcript:
 
 
 def test_door_order_free_first_and_the_paid_door_last():
-    assert door_order(detect(YT), None) == ["youtube-api", "ytdlp-subs", "speech", "paid"]
-    assert door_order(detect("https://vimeo.com/76979871"), None)[-1] == "paid"
+    assert door_order(detect(YT), None, allow_paid=True) == ["youtube-api", "ytdlp-subs", "speech", "paid"]
+    assert door_order(detect("https://vimeo.com/76979871"), None, allow_paid=True)[-1] == "paid"
     assert door_order(detect(YT), ["speech", "page"]) == ["speech"]  # page does not apply to YouTube
     with pytest.raises(ValueError, match="unknown"):
         door_order(detect(YT), ["nope"])
+
+
+def test_with_the_paid_door_off_speech_is_the_last_door_for_a_url(tmp_path, monkeypatch):
+    from video_digest import pipeline
+
+    assert door_order(detect(YT), None) == ["youtube-api", "ytdlp-subs", "speech"]
+    assert door_order(detect("https://vimeo.com/76979871"), None)[-1] == "speech"
+    assert door_order(detect("https://example.com/talks/one"), None) == ["ytdlp-subs", "speech"]
+    assert door_order(detect(YT), None, allow_paid=True)[-1] == "paid"
+    assert door_order(detect(YT), ["speech", "paid"]) == ["speech", "paid"]  # named: it runs and says it is off
+
+    def probe(ctx):
+        ctx.info = {"duration": 600}
+
+    def no_track(ctx):
+        raise NoCaptions("no track")
+
+    paid_calls = []
+
+    def paid(ctx):
+        paid_calls.append(ctx.allow_paid)
+        raise NoCaptions("no timed lines")
+
+    monkeypatch.setattr(pipeline, "_probe", probe)
+    monkeypatch.setitem(pipeline.DOORS, "youtube-api", no_track)
+    monkeypatch.setitem(pipeline.DOORS, "speech", lambda c: Transcript(lines=[Line(0, 2, "hello there")],
+                                                                       door="faster-whisper", generated=True))
+    monkeypatch.setitem(pipeline.DOORS, "paid", paid)
+    # a thin speech answer on a ten-minute video: with the paid door off, speech is the last door and its
+    # answer is used at once; with it on, the answer waits in reserve while the paid door runs
+    for allow_paid, doors, note in ((False, ["youtube-api", "ytdlp-subs", "speech"], "; no later door to try"),
+                                    (True, ["youtube-api", "ytdlp-subs", "speech", "paid"],
+                                     "; no later door heard more")):
+        folder = pipeline.run(YT, pipeline.Options(out=tmp_path / str(allow_paid), stills="never",
+                                                   allow_paid=allow_paid, log=lambda m: None, env={}))
+        meta = json.loads((folder / "meta.json").read_text(encoding="utf-8"))
+        assert [a["door"] for a in meta["attempts"] if a["door"] != "probe"] == doors, allow_paid
+        assert meta["transcript_notes"]["thin_transcript"].endswith(note), allow_paid
+    assert paid_calls == [True]
 
 
 def test_a_rate_limit_moves_to_the_next_door(make_ctx):
@@ -78,6 +117,28 @@ def test_every_door_failing_names_each_one_and_the_next_step(make_ctx):
     assert result is None
     msg = str(AllDoorsFailed(attempts))
     assert "youtube-api: blocked" in msg and "next: install the speech door" in msg
+
+
+def test_a_model_folder_named_after_faster_whisper_that_cannot_load_gets_no_install_hint(make_ctx):
+    from video_digest.doors import speech
+
+    def cannot_load(ctx):
+        raise RuntimeError("model.bin is missing")
+
+    def bad_model(ctx):  # the real speech door, every part installed, a local model folder that will not load
+        return speech.run(ctx, check=lambda: [], loader=cannot_load,
+                          fetch_audio=lambda c: pytest.fail("downloaded audio"))
+
+    ctx = make_ctx(YT, env={speech.MODEL_ENV: "/models/faster-whisper-small"})
+    result, attempts = take_doors(ctx, ["speech"], doors={"speech": bad_model}, probe=lambda c: None)
+    assert result is None
+    msg = str(AllDoorsFailed(attempts))
+    assert "the speech model /models/faster-whisper-small could not load" in msg
+    assert "install the speech door" not in msg  # the extra is installed; the model folder is the problem
+    numpy_only = speech.missing_parts(find_spec=lambda m: None if m == "numpy" else object(), which=lambda n: "ffmpeg")
+    missing = {"door": "speech", "ok": False, "kind": "DoorUnavailable",
+               "error": "the speech door needs " + ", ".join(numpy_only)}
+    assert "next: install the speech door" in str(AllDoorsFailed([missing]))  # part of the extra is missing
 
 
 def test_a_failed_probe_is_tried_once_and_the_player_supplies_the_title(tmp_path, monkeypatch):
