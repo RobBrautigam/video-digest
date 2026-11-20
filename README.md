@@ -128,7 +128,7 @@ Open a new terminal after installing so the PATH change is seen.
 ```mermaid
 flowchart TD
     S["a link or a local file"] --> Y["caption library (YouTube)"]
-    Y -->|"refused or thin"| D["yt-dlp subtitles"]
+    Y -->|"refused, failed or thin"| D["yt-dlp subtitles"]
     D -->|"none or thin"| P["the player's caption file (Vimeo, Wistia)"]
     P -->|"none or thin"| W["speech to text on your machine"]
     Y -->|"no track"| W
@@ -175,10 +175,10 @@ Each door either returns timed lines or says why not, and the run moves to the n
 spoken words a minute (sound tags such as `[Music]` and `(applause)` do not count) is kept in reserve
 and the next door runs. The video's length comes from its metadata, read before the first answer is
 judged, so a few seconds of `[Music]` on a forty-minute video counts as thin. The answer with the most
-spoken words wins: in `meta.json`'s `attempts`, a door whose thin answer was passed over shows
-`"kind": "Thin"`, a later one that heard less shows `"kind": "Fewer words"`; the thin answer that is
-used shows `"kind": "ok"`, with `"kept": true` when it waited in reserve, and carries
-`transcript_notes.thin_transcript`.
+spoken words wins: in `meta.json`'s `attempts`, a thin answer from any door but the last shows
+`"kind": "Thin"` unless it is the one used; any other answer with fewer spoken words than the one in
+reserve shows `"kind": "Fewer words"`; the thin answer that is used shows `"kind": "ok"`, with
+`"kept": true` when it waited in reserve, and carries `transcript_notes.thin_transcript`.
 
 `--doors` restricts or reorders them (`--doors speech` forces speech to text), and `--lang` asks for
 a language instead of the spoken one.
@@ -317,7 +317,7 @@ The plugin carries the skill only; the `video-digest` command comes from the pac
 
 | What you see | What it means and what to do |
 |---|---|
-| `YouTube refused the caption request`, `answered 429`, `Sign in to confirm`, or "the site is limiting requests from this address" | YouTube (or another site) is refusing your address. The run moves to the next door; wait before trying again, run from a home or office network, and never loop the tool over a channel or playlist. |
+| `YouTube refused the caption request`, `the site refused yt-dlp`, `answered 429`, `Sign in to confirm`, or "the site is limiting requests from this address" | YouTube (or another site) is refusing your address. The run moves to the next door; wait before trying again, run from a home or office network, and never loop the tool over a channel or playlist. |
 | `the site refused the download (HTTP 403)` | On YouTube, yt-dlp could not solve the site's challenge: install deno or Node.js (see [Missing tools?](#missing-tools)). |
 | `the speech door needs ... ffmpeg on PATH`, `ffmpeg is not on PATH` or `ffprobe is not on PATH` | Install ffmpeg; captions and the digest step still work without it. |
 | `install the speech door: pip install 'video-digest[speech]'` | No caption door answered and the speech extra is not installed. |
