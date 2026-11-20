@@ -37,8 +37,9 @@ transcript files, the filled `digest.json`, the quote check and all three pages.
 - **More of the digest is checked.** Quotes in the "actions for you" section and in new optional
   `sections[]` (any extra section you want, such as "what we could borrow") are checked against the
   transcript like the main points, and `--snap` moves them too. A placeholder time such as `1:00:1x`
-  is refused anywhere in the digest, your own summaries and titles included; a ratio such as 16:9 or
-  80:20 is not a placeholder and passes.
+  is refused in every time field and anywhere in your own words, summaries and titles included (a
+  quote is checked against the transcript instead); a ratio such as 16:9 or 80:20 is not a
+  placeholder and passes.
 - **Quote links no longer open late on automatic captions.** Automatic caption lines overlap the next
   line on screen; when they do, the word clock now spreads a line's words over the time until the next
   line starts instead of the whole time it is shown, so a quote's time is no longer late.
@@ -71,6 +72,7 @@ video-digest digest examples/youtube-nasa-podium-test --check-only
 python -c "import shutil; shutil.copytree('examples/youtube-nasa-podium-test', 'digests/try-it')"
 video-digest digest digests/try-it
 # wrote digests/try-it/digest.md, digests/try-it/digest.html and digests/try-it/transcript.html
+# (on Windows these paths print with backslashes, as does the folder in a run's summary line)
 ```
 
 Open `digests/try-it/digest.html` in a browser. Then a real video (this one needs the network):
@@ -95,7 +97,7 @@ or from a clone: `pip install ".[speech]"`. Python 3.10 or newer.
   program, not bundled.
 - **yt-dlp** comes with the package (`yt-dlp[default]`, which includes the `yt-dlp-ejs` challenge
   solver). For YouTube media downloads (speech to text and stills only; captions do not need it),
-  yt-dlp also needs a JavaScript runtime on your PATH: [deno](https://deno.com) or Node.js.
+  yt-dlp also needs a JavaScript runtime on your PATH: [deno](https://deno.com), Node.js or Bun.
   video-digest enables every runtime it finds.
 - **The speech model downloads on first use** from Hugging Face and is cached. The defaults are
   faster-whisper's `base.en` when the speech is known to be English and `base` (multilingual)
@@ -208,7 +210,9 @@ video-digest "https://www.youtube.com/watch?v=6SDVw1PYYcw" --stills --keep-media
 ```
 
 `-o` sets the parent folder (default `./digests`); each video gets its own folder named after the
-source and its id.
+source and its id. A site page or a local file also adds a short hash of its address or path
+(`https://example.com/talk` gets `site-example.com-talk-9e5fd52b`), so two videos with the same id
+or file name never share a folder.
 
 ### The proof: four public sources, run end to end
 
@@ -239,7 +243,7 @@ What the runs showed:
   about 13 times real time, model load included. The model misheard the author's name in the
   reader's introduction: names are where speech to text slips.
 - The speech run on YouTube first failed with HTTP 403 until yt-dlp had a JavaScript runtime; the
-  tool now enables any it finds and says so in the error when none is found.
+  tool now enables any it finds, and its message for an HTTP 403 names that fix.
 
 Word agreement is a word-sequence match (Python's `difflib`) between two machine outputs: it measures
 agreement, not accuracy.
@@ -278,9 +282,9 @@ What goes in `digest.json` (the example's [`digest.json`](examples/youtube-nasa-
 - a quote (in a point, a section row or an action) not found in the transcript, in order, within 75
   seconds of its time (`--window` to change);
 - a time that is not a real `H:MM:SS`, or past the end of the video; a placeholder such as `1:00:1x`
-  is refused in a time field and anywhere in the digest's text;
+  is refused in a time field and anywhere in your own words (a quote is checked as a quote);
 - an action with a quote but no time, a point or section row with no text, a section with no title;
-- a point whose `kind` is a word other than the seven;
+- a point whose `kind` is set but is not one of the seven;
 - chapters out of order.
 
 The HTML pages are single files with no scripts and nothing loaded from elsewhere, readable in light
@@ -289,7 +293,7 @@ each time on YouTube and Vimeo. The digest page links the transcript page and th
 links back. The digest page ends with how it was made: the doors tried, the quote count, the longest
 stretch with no spoken words, and the version of the tool. The transcript page opens with the door,
 the track, whether its captions were automatic (or that it is speech to text), and the longest
-stretch with no spoken words; each chapter's fold opens on a click.
+stretch with no spoken words when it is a second or longer; each chapter's fold opens on a click.
 
 ![The transcript page from the committed example: chapters with their length and word count, and the text in timed paragraphs](docs/transcript-page.png)
 

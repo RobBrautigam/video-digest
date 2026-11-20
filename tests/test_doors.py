@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from video_digest import ytdlp
+from video_digest import output, ytdlp
 from video_digest.doors import page_captions, paid, sidecar, speech, youtube_api, ytdlp_subs
 from video_digest.models import DoorError, DoorUnavailable, NoCaptions, RateLimited, Refused
 from tests.conftest import FakeFetch
@@ -286,6 +286,25 @@ def test_paid_door_reads_timed_content_and_waits_for_a_job(make_ctx):
     t = paid.run(ctx)
     assert (t.lines[0].start, t.lines[0].dur, t.lines[0].text) == (8.15, 1.2, "hi there")
     assert "mode=native" in fetch.calls[0] and "text=false" in fetch.calls[0]
+
+
+def test_paid_door_label_says_what_each_mode_answers_with(make_ctx):
+    answer = json.dumps({"lang": "en", "content": [{"text": "hi there", "offset": 0, "duration": 1200}]})
+    labels = {}
+    heads = {}
+    for mode in ("native", "generate", "auto", "xyz"):
+        fetch = FakeFetch({"https://api.supadata.ai/v1/transcript?": answer})
+        t = paid.run(make_ctx(YT, allow_paid=True, env={paid.KEY_ENV: "k", paid.MODE_ENV: mode}, fetch=fetch))
+        assert f"mode={mode}" in fetch.calls[0]
+        labels[mode] = (t.track, t.generated)
+        heads[mode] = output.transcript_markdown(t, [], "A film", YT, 10.0)
+    assert labels == {
+        "native": ("supadata native: the site's own captions", None),  # manual or automatic: not stated
+        "generate": ("supadata generate: words Supadata made from the audio", True),
+        "auto": ("supadata auto: the site's captions or words made from the audio, not stated which", None),
+        "xyz": ("supadata xyz", None)}  # a mode the door does not know keeps the plain label
+    assert "(supadata native: the site's own captions), language en, captions unknown" in heads["native"]
+    assert "(supadata generate: words Supadata made from the audio), language en" in heads["generate"]
 
 
 # --- sidecar ----------------------------------------------------------------------------------------

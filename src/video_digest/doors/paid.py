@@ -53,5 +53,11 @@ def run(ctx: RunContext) -> Transcript:
     lines = [Line(float(c.get("offset") or 0) / 1000, float(c.get("duration") or 0) / 1000,
                   " ".join(str(c.get("text") or "").split())) for c in content]
     lines = [ln for ln in lines if ln.text]
-    return Transcript(lines=lines, door=NAME, language=data.get("lang"), generated=None,
-                      track=f"supadata {params['mode']}", notes={"available_languages": data.get("availableLangs")})
+    mode = params["mode"]
+    # what the words are, by the mode asked: native is the site's own caption track (manual or automatic, not
+    # stated), generate is words the service made from the audio, auto is either one, not stated which
+    what = {"native": "the site's own captions", "generate": "words Supadata made from the audio",
+            "auto": "the site's captions or words made from the audio, not stated which"}.get(mode)
+    return Transcript(lines=lines, door=NAME, language=data.get("lang"), generated=True if mode == "generate" else None,
+                      track=f"supadata {mode}: {what}" if what else f"supadata {mode}",
+                      notes={"available_languages": data.get("availableLangs")})
