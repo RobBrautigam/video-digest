@@ -10,6 +10,7 @@ venv/
 out/
 digests/
 scratch/
+tmp/
 *.mp4
 *.m4a
 *.webm

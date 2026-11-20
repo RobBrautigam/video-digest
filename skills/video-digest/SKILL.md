@@ -37,8 +37,9 @@ fresh agent) reading speakers and context, which no script can check.
    used, words, chapters. `transcript.html` in the folder is the whole text by chapter, for a person
    to read. Open `meta.json` when anything looks off:
    - `attempts` lists every door tried, why each failed and how long it took;
-   - `transcript_notes.thin_transcript` means the caption track held almost no words for the video's
-     length (a music track, a placeholder) and no later door heard more: say so in the report;
+   - `transcript_notes.thin_transcript` means the words the run kept (a caption track or speech to
+     text) were almost none for the video's length (a music track, a placeholder) and no other door
+     heard more: say so in the report;
    - `transcript_notes.language_guessed` means the player did not say which track is spoken: rerun
      with `--lang <code>` if the guess is wrong;
    - for a screen demo, pass `--stills` (stills by chapter in `stills/`), or let the tool decide: it
@@ -65,11 +66,17 @@ fresh agent) reading speakers and context, which no script can check.
      quote is checked like a point's.
    - `actions[]`: only when the user gave context; each a concrete step with the `time` it comes from,
      and a `quote` when it rests on the speaker's words (checked too). Leave it empty otherwise.
-6. **Check by script.** `video-digest digest <folder> --check-only`. Every miss is a quote not found
-   within 75 seconds of its time (in a point, a section row or an action), a malformed time (a
-   placeholder such as `1:00:1x` is refused anywhere in the digest, your own prose included), or
-   chapters out of order. Fix each from the transcript (search `transcript.md` for the exact words; a
-   caption track hears a product or a name its own way, so quote it as the track spells it). Then
+6. **Check by script.** `video-digest digest <folder> --check-only`. A miss is any of:
+   - a quote (in a point, a section row or an action) not found within 75 seconds of its time;
+   - a chapter, point or section row with no time, a time that is not a real `H:MM:SS`, or one past
+     the end of the video; a placeholder such as `1:00:1x` is refused in a time field and anywhere in
+     the digest, your own prose included;
+   - an action with a quote but no time, a point or section row with no text, a section with no title;
+   - a point whose `kind` is set but is not one of the seven;
+   - chapters out of order.
+
+   Fix each from the transcript (search `transcript.md` for the exact words; a caption track hears a
+   product or a name its own way, so quote it as the track spells it). Then
    `video-digest digest <folder> --snap` moves every quoted entry to the second its quote starts.
 7. **Read speakers and context.** For every quote that names who said it or what it means, read the
    sentence before and after it in `transcript.md`. The script proves the words and the time; it
@@ -102,6 +109,7 @@ fresh agent) reading speakers and context, which no script can check.
 - YouTube refuses many cloud and data-center addresses; run from a home or office network.
 - Automatic captions mishear names, numbers and jargon; check the high-stakes words against the audio
   when they matter.
-- Speech to text on a processor is minutes, not seconds: measured at 6.5 to 13 times real time with
-  the base models, download and model load included. For a long course, plan on the slower figure (a
-  five-hour video is most of an hour).
+- Speech to text on a processor is minutes, not seconds: measured with the base models at 6.5 times
+  real time on a YouTube video (download and model load included) and about 13 times on a local clip
+  (model load included). For a long course, plan on the slower figure (a five-hour video is most of an
+  hour).

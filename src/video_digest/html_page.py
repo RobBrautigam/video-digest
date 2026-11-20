@@ -10,6 +10,7 @@ from typing import Any
 
 from video_digest.digest import (LABELS, CheckResult, _chapter_lines, _grouped, _span_cells, _video_end, _word_count,
                                  chapter_spans, how_made, longest_gap, paragraphs, time_key, time_link)
+from video_digest.doors.speech import NAME as SPEECH_DOOR
 from video_digest.output import read_json
 from video_digest.parse import parse_stamp, stamp
 
@@ -202,7 +203,7 @@ def render_transcript_html(meta: dict[str, Any], chapters: list[dict[str, Any]],
         chs = [{"start": 0.0, "title": "Transcript"}]
     title = str(meta.get("title") or meta.get("id") or "Transcript")
     total = _word_count(lines)
-    if meta.get("door") == "speech":
+    if meta.get("door") == SPEECH_DOOR:  # meta.json holds the door's own name, not its key "speech"
         how = "speech to text"
     else:
         how = "captions " + {True: "automatic", False: "manual"}.get(meta.get("generated"), "not stated")

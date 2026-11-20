@@ -8,7 +8,8 @@ import json
 
 import pytest
 
-from video_digest import cli, digest, html_page
+from video_digest import cli, digest, html_page, output
+from video_digest.doors import speech
 from video_digest.models import DoorUnavailable, Line, Transcript
 from video_digest.pipeline import take_doors
 
@@ -155,6 +156,21 @@ def test_the_digest_command_writes_three_pages_and_page_rewrites_the_transcript(
     assert cli.main(["page", str(tmp_path / "nothing-here")]) == 2
 
 
+def test_a_speech_run_says_speech_to_text_on_the_transcript_page_and_in_transcript_md():
+    # meta.json's "door" is the door's own name (pipeline.run stores transcript.door), not its key "speech"
+    heard = Transcript(lines=[Line(0.0, 4.0, "Welcome to the open movie project.")], door=speech.NAME,
+                       language="en", generated=True, track="base.en")
+    meta = {"door": speech.NAME, "track": "base.en", "generated": True, "source": YT, "kind": "youtube",
+            "id": "aqz-KE-bpKQ", "duration": 310}
+    for text in (output.transcript_markdown(heard, [], "A film", YT, 310.0),
+                 html_page.render_transcript_html(meta, [], LINES)):
+        assert "speech to text" in text and "captions automatic" not in text
+    captions = Transcript(lines=heard.lines, door="youtube-transcript-api", generated=True, track="en")
+    assert "captions automatic" in output.transcript_markdown(captions, [], "A film", YT, 310.0)
+    page = html_page.render_transcript_html({**meta, "door": "youtube-transcript-api", "track": "en"}, [], LINES)
+    assert "captions automatic" in page and "speech to text" not in page
+
+
 # --- thin caption tracks ----------------------------------------------------------------------------
 
 def _thin() -> Transcript:
@@ -267,3 +283,16 @@ def test_section_text_is_escaped_on_the_digest_page(tmp_path):
     result = digest.check(folder)
     page = html_page.render_html(d, json.loads((folder / "meta.json").read_text(encoding="utf-8")), result)
     assert "Borrow &lt;b&gt;this&lt;/b&gt;" in page and "A &amp; B &lt;i&gt;" in page and "<b>this" not in page
+
+
+def test_a_draft_with_a_kind_that_is_not_a_word_still_writes_its_pages(tmp_path, capsys):
+    d = json.loads(json.dumps(GOOD))
+    d["points"] += [{"time": "0:01:00", "kind": ["claim"], "text": "A list for a kind"},
+                    {"time": "0:05:00", "kind": 3, "text": "A number for a kind"}]
+    folder = _folder(tmp_path, d)
+    assert cli.main(["digest", str(folder), "--draft"]) == 1  # the pages are written; the problems stay open
+    out = capsys.readouterr().out
+    assert "point 2: kind ['claim'] is not one of" in out and "point 3: kind 3 is not one of" in out
+    for name in ("digest.md", "digest.html"):
+        page = (folder / name).read_text(encoding="utf-8")
+        assert "Free tools" in page and "A list for a kind" in page and "A number for a kind" in page, name

@@ -27,6 +27,8 @@ DOORS: dict[str, Callable[[RunContext], Transcript]] = {
 }
 CAPTION_DOORS = {"youtube-api", "ytdlp-subs", "page", "sidecar"}
 NEEDS_PROBE = {"ytdlp-subs", "speech"}
+# The speech door names this command when its extra is missing; a model name or folder never holds it
+SPEECH_INSTALL = "pip install 'video-digest[speech]'"
 
 # Free first. The paid door is last and runs only when the user turned it on.
 ORDER: dict[str, list[str]] = {
@@ -43,8 +45,8 @@ class AllDoorsFailed(RuntimeError):
         self.attempts = attempts
         lines = [f"  - {a['door']}: {a['error']}" for a in attempts if not a["ok"]]
         hints = []
-        if any(a["kind"] == "DoorUnavailable" and "faster-whisper" in a["error"] for a in attempts):
-            hints.append("install the speech door: pip install 'video-digest[speech]'")
+        if any(a["kind"] == "DoorUnavailable" and SPEECH_INSTALL in a["error"] for a in attempts):
+            hints.append(f"install the speech door: {SPEECH_INSTALL}")
         if any(a["kind"] == "RateLimited" for a in attempts):
             hints.append("the site is limiting requests from this address: wait, or run from another network")
         msg = "no door returned a transcript:\n" + "\n".join(lines)
@@ -67,10 +69,13 @@ class Options:
     log: Callable[[str], None] | None = None
 
 
-def door_order(source: Source, chosen: list[str] | None) -> list[str]:
+def door_order(source: Source, chosen: list[str] | None, allow_paid: bool = False) -> list[str]:
+    """The doors to take, in order. The paid door is left out of the default order unless it is on, so the
+    last free door is judged as the last; a door named in `chosen` stays (the paid door, named while it is
+    off, refuses and says why)."""
     order = ORDER[source.kind]
     if not chosen:
-        return list(order)
+        return [d for d in order if allow_paid or d != "paid"]
     unknown = [d for d in chosen if d not in DOORS]
     if unknown:
         raise ValueError(f"unknown door(s): {', '.join(unknown)} (doors: {', '.join(DOORS)})")
@@ -177,6 +182,7 @@ def take_doors(ctx: RunContext, order: list[str], doors: dict[str, Callable[[Run
             continue
         if why:
             result.notes["thin_transcript"] = f"{why}; no later door to try"
+            ctx.log(f"{name}: {why}; no later door to try")
         ctx.log(f"{name}: {result.words:,} words in {took:.1f} s")
         return result, attempts
     if thin is not None:
@@ -199,8 +205,10 @@ def run(ref: str, opts: Options) -> Path:
         ctx.env = opts.env
     if opts.log is not None:
         ctx.log = opts.log
-    order = door_order(source, opts.doors)
+    order = door_order(source, opts.doors, opts.allow_paid)
     transcript, attempts = take_doors(ctx, order)
+    if transcript is None and not opts.doors and not opts.allow_paid and "paid" in ORDER[source.kind]:
+        attempts += take_doors(ctx, ["paid"])[1]  # left out while off: its own refusal says how to turn it on
     if not any(a["door"] == "probe" for a in attempts):
         # a door that needs no metadata won: one read for the title, length and chapters
         attempts.append(_probe_attempt(ctx, _probe))

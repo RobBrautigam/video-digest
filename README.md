@@ -127,12 +127,17 @@ Open a new terminal after installing so the PATH change is seen.
 
 ```mermaid
 flowchart TD
-    S["a link or a local file"] --> Y["caption library (YouTube)"]
+    S["a link or a local file"] -->|"YouTube"| Y["caption library (YouTube)"]
+    S -->|"Vimeo, Wistia or another site"| D["yt-dlp subtitles"]
+    S -->|"a local file"| F["a caption file beside it"]
     Y -->|"refused, failed or thin"| D["yt-dlp subtitles"]
-    D -->|"none or thin"| P["the player's caption file (Vimeo, Wistia)"]
+    D -->|"none or thin (Vimeo, Wistia)"| P["the player's caption file (Vimeo, Wistia)"]
+    D -->|"none or thin (YouTube, other sites)"| W
+    F -->|"none or thin"| W
+    F -->|"timed lines"| T
     P -->|"none or thin"| W["speech to text on your machine"]
     Y -->|"no track"| W
-    W -->|"failed or thin"| X["paid door, off unless --allow-paid"]
+    W -->|"failed or thin (a link only)"| X["paid door, off unless --allow-paid"]
     Y & D & P & W & X -->|"timed lines"| T["transcript.md, .json, .html and meta.json"]
     T --> G["you or an agent fill digest.json"]
     G --> C{"video-digest digest: every quote checked"}
