@@ -291,18 +291,20 @@ def test_paid_door_reads_timed_content_and_waits_for_a_job(make_ctx):
 def test_paid_door_label_says_what_each_mode_answers_with(make_ctx):
     answer = json.dumps({"lang": "en", "content": [{"text": "hi there", "offset": 0, "duration": 1200}]})
     labels = {}
-    for mode in ("native", "generate", "auto"):
+    heads = {}
+    for mode in ("native", "generate", "auto", "xyz"):
         fetch = FakeFetch({"https://api.supadata.ai/v1/transcript?": answer})
         t = paid.run(make_ctx(YT, allow_paid=True, env={paid.KEY_ENV: "k", paid.MODE_ENV: mode}, fetch=fetch))
         assert f"mode={mode}" in fetch.calls[0]
         labels[mode] = (t.track, t.generated)
-        if mode == "native":
-            head = output.transcript_markdown(t, [], "A film", YT, 10.0)
-            assert "(supadata native: the site's own captions), language en, captions unknown" in head
+        heads[mode] = output.transcript_markdown(t, [], "A film", YT, 10.0)
     assert labels == {
         "native": ("supadata native: the site's own captions", None),  # manual or automatic: not stated
         "generate": ("supadata generate: words Supadata made from the audio", True),
-        "auto": ("supadata auto: the site's captions or words made from the audio, not stated which", None)}
+        "auto": ("supadata auto: the site's captions or words made from the audio, not stated which", None),
+        "xyz": ("supadata xyz", None)}  # a mode the door does not know keeps the plain label
+    assert "(supadata native: the site's own captions), language en, captions unknown" in heads["native"]
+    assert "(supadata generate: words Supadata made from the audio), language en" in heads["generate"]
 
 
 # --- sidecar ----------------------------------------------------------------------------------------

@@ -282,7 +282,7 @@ What goes in `digest.json` (the example's [`digest.json`](examples/youtube-nasa-
 - a quote (in a point, a section row or an action) not found in the transcript, in order, within 75
   seconds of its time (`--window` to change);
 - a time that is not a real `H:MM:SS`, or past the end of the video; a placeholder such as `1:00:1x`
-  is refused in a time field and anywhere in the digest's text;
+  is refused in a time field and anywhere in your own words (a quote is checked as a quote);
 - an action with a quote but no time, a point or section row with no text, a section with no title;
 - a point whose `kind` is set but is not one of the seven;
 - chapters out of order.

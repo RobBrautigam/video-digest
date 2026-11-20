@@ -314,12 +314,21 @@ def test_a_value_that_is_not_text_is_one_plain_problem_and_a_draft_still_writes_
     bad["sections"][0]["rows"][0]["text"] = ["Use free tools"]
     bad["actions"][0]["quote"] = 5
     bad["actions"].append({"text": "No time", "quote": 6})
+    bad["points"].append({"time": "0:05:00", "kind": "claim", "text": "A zero for a quote", "quote": 0})
     problems = digest.check(_folder(tmp_path, bad)).problems
     for want in ("point 1: quote 42 is not a string", "section 1: title 7 is not a string",
                  "section 1 row 1: text ['Use free tools'] is not a string", "action 1: quote 5 is not a string",
-                 "action 2: quote 6 is not a string"):
+                 "action 2: quote 6 is not a string", "point 2: quote 0 is not a string"):
         assert [p for p in problems if p.startswith(want)], (want, problems)
-    assert len(problems) == 5, problems  # each bad value once, and no empty-text or no-time problem beside it
+    assert len(problems) == 6, problems  # each bad value once, and no empty-text or no-time problem beside it
+
+
+def test_an_action_at_second_zero_is_timed_and_its_quote_checked(tmp_path):
+    d = json.loads(json.dumps(GOOD))
+    d["actions"].append({"text": "Start here", "time": 0, "quote": "Welcome to the open movie project"})
+    result = digest.check(_folder(tmp_path, d))
+    assert result.problems == []  # parse_stamp reads a number as seconds, so 0 is a time, not a missing one
+    assert [q["found_at"] for q in result.quotes if q.get("action") == 2] == ["0:00:00"]
 
 
 def test_a_kind_of_zero_or_an_empty_list_is_a_problem_not_a_method(tmp_path):
@@ -327,12 +336,13 @@ def test_a_kind_of_zero_or_an_empty_list_is_a_problem_not_a_method(tmp_path):
     d["points"] += [{"time": "0:01:00", "kind": 0, "text": "Zero for a kind"},
                     {"time": "0:05:00", "kind": [], "text": "An empty list for a kind"},
                     {"time": "0:05:00", "kind": "", "text": "An empty kind"},
-                    {"time": "0:05:00", "text": "No kind at all"}]
+                    {"time": "0:05:00", "text": "No kind at all"},
+                    {"time": "0:05:00", "kind": None, "text": "A null kind"}]
     problems = digest.check(_folder(tmp_path, d)).problems
     seven = ", ".join(digest.KINDS)
     assert f"point 2: kind 0 is not one of {seven}" in problems
     assert f"point 3: kind [] is not one of {seven}" in problems
-    assert not [p for p in problems if p.startswith(("point 4", "point 5"))], problems  # not set: a method
+    assert not [p for p in problems if p.startswith(("point 4", "point 5", "point 6"))], problems  # a method
     groups = {kind: [p["text"] for p in pts] for kind, pts in digest._grouped(d["points"])}
-    assert groups["method"] == ["Free tools", "An empty kind", "No kind at all"]
+    assert groups["method"] == ["Free tools", "An empty kind", "No kind at all", "A null kind"]
     assert groups["0"] == ["Zero for a kind"] and groups["[]"] == ["An empty list for a kind"]

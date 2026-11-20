@@ -223,11 +223,14 @@ def quote_target(d: dict[str, Any], q: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _unset(value: Any) -> bool:
+    """Missing, null or "": not given. Any other value is given, a 0 or a [] included, and is checked."""
+    return value is None or value == ""
+
+
 def _no_kind(p: dict[str, Any]) -> bool:
-    """A point with no kind (missing, null or "") is a method. Any other value is set, a 0 or a [] included,
-    and must be one of KINDS."""
-    kind = p.get("kind")
-    return kind is None or kind == ""
+    """A point with no kind (missing, null or "") is a method. Any other kind must be one of KINDS."""
+    return _unset(p.get("kind"))
 
 
 def check(folder: Path, window: float = DEFAULT_WINDOW) -> CheckResult:
@@ -297,9 +300,10 @@ def check(folder: Path, window: float = DEFAULT_WINDOW) -> CheckResult:
             quoted(row, where, {"section": s, "row": r}, at(row.get("time"), where))
     for i, a in enumerate(d.get("actions") or []):
         where = f"action {i + 1}"
-        t = at(a["time"], where) if a.get("time") else None
+        untimed = _unset(a.get("time"))  # a time of 0 is second zero, as parse_stamp reads a number
+        t = None if untimed else at(a["time"], where)
         quote = a.get("quote")
-        if isinstance(quote, str) and quote.strip() and not a.get("time"):  # a non-string quote: quoted() says so
+        if isinstance(quote, str) and quote.strip() and untimed:  # a non-string quote: quoted() says so
             problems.append(f"{where}: a quote needs the time it was said")
         else:
             quoted(a, where, {"action": i + 1}, t)
